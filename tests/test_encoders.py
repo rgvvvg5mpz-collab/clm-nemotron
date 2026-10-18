@@ -231,3 +231,96 @@ def test_finetune_refuses_upstream_embedding_dir(tmp_path):
                         "--emb-dir", str(emb), "--out-dir", str(tmp_path / "out"), "--batch", "2",
                         "--epochs", "1"], capture_output=True, text=True)
     assert p.returncode != 0 and "records no encoder" in p.stderr
+
+
+# ----------------------------------------------------------------------------- no head yet: clm-raw
+def test_engine_without_head_defaults_to_raw(monkeypatch):
+    monkeypatch.delenv("CLM_CKPT", raising=False)
+    eng = Engine(fake_embedder(), device="cpu", action_cache="0")
+    assert eng.default_model == "clm-raw" and [m["name"] for m in eng.models()] == ["clm-raw"]
+    out = eng.answer("Customer: charged twice!", {"q": {"type": "noul", "instructions": "Is it about billing?"}})
+    assert out["model"] == "clm-raw" and 0 <= out["answers"]["q"]["noul"] <= 1
+    assert eng.rank("Tides?", ["The Moon.", "Plants."])[0]["rank"] == 1
+
+
+def test_server_serves_raw_without_a_head(monkeypatch):
+    from fastapi.testclient import TestClient
+    from clm.server import create_app
+    monkeypatch.delenv("CLM_CKPT", raising=False)
+    eng = Engine(fake_embedder(), device="cpu", action_cache="0")
+    eng.embedder.healthy = lambda: True
+    c = TestClient(create_app(eng))
+    h = c.get("/health").json()
+    assert h["default_model"] == "clm-raw" and h["encoder"]["name"] == "nemotron-3-embed-8b"
+    r = c.post("/v1/systemone", json={"state": "s", "questions": {"q": {"type": "noul", "instructions": "ok?"}}})
+    assert r.status_code == 200 and r.json()["model"] == "clm-raw"
+    r = c.post("/v1/rank", json={"context": "c", "answers": ["a", "b"]})
+    assert r.status_code == 200 and r.json()["model"] == "clm-raw"
+    r = c.post("/v1/systemone", json={"state": "s", "model": "clm-latest",
+                                      "questions": {"q": {"type": "noul", "instructions": "ok?"}}})
+    assert r.status_code == 422                                # asking for a head that is not there
+
+
+def test_client_lets_the_server_pick_the_model():
+    from clm.client import CLMClient
+
+    class Capture:
+        headers = {}
+
+        def post(self, url, json, timeout):
+            self.body = json
+            return type("R", (), {"status_code": 200, "headers": {}, "json": lambda s: {
+                "model": "clm-raw", "answers": {}, "usage": {}}})()
+    client = CLMClient()
+    client._s = Capture()
+    assert client.system_one("s", {}).model == "clm-raw"
+    assert "model" not in client._s.body
+    client.system_one("s", {}, model="clm-latest")
+    assert client._s.body["model"] == "clm-latest"
+
+
+# ----------------------------------------------------------------------------- typed-decisions training
+def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
+    """End to end on CPU: embeddings come from a pre-filled cache, so no encoder is needed."""
+    import hashlib
+    import json
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import adapters
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for i in range(24):
+        team = "billing" if i % 2 else "technical"
+        rows.append({"id": f"r{i}", "state": f"Ticket {i}: {'refund please' if i % 2 else 'app crashes'}",
+                     "questions": json.dumps({"dept": {"type": "choice", "instructions": "Which team?",
+                                                       "criteria": {"billing": "Charges and refunds",
+                                                                    "technical": "Bugs and outages"}}}),
+                     "gold": json.dumps({"dept": {"label": team}})})
+    data = tmp_path / "typed.parquet"
+    pq.write_table(pa.Table.from_pylist(rows), data)
+
+    keys = set()
+    for e in adapters.typed_decision_examples(rows):
+        keys.add("state\x00" + e.state_text)
+        keys.update("action\x00" + t for t in e.candidates)
+    keys = sorted(keys)
+    sha = [hashlib.sha1(k.encode()).hexdigest() for k in keys]
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    np.savez(cache_dir / "choice_nemotron-3-embed-8b_2048.npz", keys=np.array(sha),
+             vecs=rng.standard_normal((len(keys), 4096)).astype(np.float16))
+
+    out = tmp_path / "run"
+    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "choice",
+                        "--data", str(data), "--embed-cache", str(cache_dir), "--out-dir", str(out),
+                        "--epochs", "2", "--batch", "8", "--width", "32", "--depth", "2", "--gpu", "0"],
+                       capture_output=True, text=True, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""})
+    assert p.returncode == 0, p.stderr[-2000:]
+    assert "clm-raw (nemotron-3-embed-8b, no head)" in p.stdout
+    summary = json.load(open(out / "finetune_summary.json"))
+    assert 0 <= summary["raw_test"] <= 1 and "test" in summary
+    ck = torch.load(out / "best_head.pt", map_location="cpu", weights_only=False)
+    assert ck["cfg"]["encoder"] == NEMO.identity()
+    HeadPair("trained", str(out / "best_head.pt"), "cpu", NEMO).ensure()   # servable as-is

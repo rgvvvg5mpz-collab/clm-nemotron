@@ -464,6 +464,7 @@ def run_choice(args) -> dict:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    from clm.engine import RAW_SCALE
     from clm.heads import make_head
 
     train_rows = load_typed_rows(args.data, "train", args.workflow, args.hf_cache)
@@ -543,11 +544,12 @@ def run_choice(args) -> dict:
 
     if args.loss == "infonce":  # flat train set: every text once, options as indices into it
         tr = ex["train"]
-        text_id = {t: i for i, t in enumerate(dict.fromkeys(t for e in tr for t in (e.state_text, *e.candidates)))}
-        emb = torch.tensor(np.stack([cache[t] for t in text_id]), dtype=torch.float32, device=device)
+        text_id = {k: i for i, k in enumerate(dict.fromkeys(
+            k for e in tr for k in (skey(e.state_text), *map(akey, e.candidates))))}
+        emb = torch.tensor(np.stack([cache[k] for k in text_id]), dtype=torch.float32, device=device)
         kmax = max(len(e.keys) for e in tr)
-        st_idx = torch.tensor([text_id[e.state_text] for e in tr], device=device)
-        opt_idx = torch.tensor([[text_id[t] for t in e.candidates] + [-1] * (kmax - len(e.keys)) for e in tr],
+        st_idx = torch.tensor([text_id[skey(e.state_text)] for e in tr], device=device)
+        opt_idx = torch.tensor([[text_id[akey(t)] for t in e.candidates] + [-1] * (kmax - len(e.keys)) for e in tr],
                                device=device)
         opt_tgt = torch.tensor([(e.target if args.targets == "soft" else
                                  [float(i == e.label) for i in range(len(e.keys))]) + [0.0] * (kmax - len(e.keys))
@@ -572,12 +574,15 @@ def run_choice(args) -> dict:
         bwd = -(w * F.log_softmax(lg.t()[keep], 1)).sum(1).mean()
         return (fwd + bwd) / 2
 
+    def raw_logits(q, c):  # clm-serve's clm-raw: cosine in the encoder's own space, no heads
+        return RAW_SCALE * torch.einsum("bh,bkh->bk", F.normalize(q, dim=-1), F.normalize(c, dim=-1))
+
     @torch.no_grad()
-    def evaluate(split):
+    def evaluate(split, raw=False):
         sh.eval(); ah.eval()
         hit = n = 0; ce = 0.0; per = defaultdict(lambda: [0, 0])
         for q, c, tgt, lab, qids in data[split]:
-            lg = logits(q, c)
+            lg = raw_logits(q, c) if raw else logits(q, c)
             pred = lg.argmax(-1)
             ce += -(tgt * F.log_softmax(lg, -1)).sum(-1).sum().item()
             ok = (pred == lab).tolist()
@@ -603,9 +608,13 @@ def run_choice(args) -> dict:
     steps = max(1, per_epoch) * args.epochs
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr or 5e-4, total_steps=steps,
                                                 pct_start=0.1, anneal_strategy="cos")
-    base = {"majority_val": majority_baseline("val"), "majority_test": majority_baseline("test")}
+    raw_val, raw_test = evaluate("val", raw=True), evaluate("test", raw=True)
+    base = {"majority_val": majority_baseline("val"), "majority_test": majority_baseline("test"),
+            "raw_val": raw_val["acc"], "raw_test": raw_test["acc"],
+            "raw_test_per_question": raw_test["per_question"]}
     m0 = {"val": evaluate("val"), "test": evaluate("test")}
-    print(f"[choice] baselines {json.dumps(base)}", flush=True)
+    print(f"[choice] baselines: majority test {base['majority_test']:.4f} | clm-raw ({spec.name}, no head) "
+          f"val {raw_val['acc']:.4f} test {raw_test['acc']:.4f}", flush=True)
     print(f"[choice] epoch 0 (init) val acc {m0['val']['acc']:.4f} test acc {m0['test']['acc']:.4f}", flush=True)
 
     def blob(epoch, metrics):
@@ -658,7 +667,8 @@ def run_choice(args) -> dict:
         logit_scale.copy_(best_ck["logit_scale"].to(device))
     mt = evaluate("test")
     print(f"[choice] best epoch {best_ep}: val acc {best:.4f} | TEST acc {mt['acc']:.4f} "
-          f"(init {m0['test']['acc']:.4f}, majority {base['majority_test']:.4f}) per_question {mt['per_question']}",
+          f"(clm-raw {base['raw_test']:.4f}, init {m0['test']['acc']:.4f}, majority {base['majority_test']:.4f}) "
+          f"per_question {mt['per_question']}",
           flush=True)
     json.dump(history, open(os.path.join(args.out_dir, "history.json"), "w"), indent=1)
     return {"best_epoch": best_ep, "val_acc": best, "test": mt, "init_test": m0["test"], **base,

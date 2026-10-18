@@ -105,20 +105,30 @@ class Engine:
     # ------------------------------------------------------------------ models
     def models(self) -> list[dict[str, str]]:
         desc = {DEFAULT_MODEL: f"Contrastive language model: {self.encoder.hf_id} encoder + trained projection heads",
-                RAW_MODEL: "Ablation: cosine in the raw encoder embedding space, no projection head"}
+                RAW_MODEL: (f"Cosine in the raw {self.encoder.hf_id} embedding space, no projection head; "
+                            "scores are uncalibrated")}
         names = ([DEFAULT_MODEL] if DEFAULT_MODEL in self.heads else []) + \
             sorted(n for n in self.heads if n != DEFAULT_MODEL) + [RAW_MODEL]
         return [{"name": n, "release_date": RELEASE,
                  "description": desc.get(n) or f"Projection-head checkpoint {os.path.basename(self.heads[n].path)}"}
                 for n in names]
 
+    @property
+    def default_model(self) -> str:
+        """What a request without ``model`` gets: ``clm-latest``, else another served head,
+        else ``clm-raw`` (a server with no trained head yet)."""
+        if DEFAULT_MODEL in self.heads:
+            return DEFAULT_MODEL
+        return min(self.heads) if self.heads else RAW_MODEL
+
     def has(self, model: str) -> bool:
         return model == RAW_MODEL or model in self.heads
 
     # ------------------------------------------------------------------ inference
-    def answer(self, state: Any, questions: dict[str, dict], model: str = DEFAULT_MODEL,
+    def answer(self, state: Any, questions: dict[str, dict], model: str | None = None,
                temperature: float = 1.0) -> dict:
         """-> {"model", "answers": {id: Answer}, "usage"}; raises ValueError on bad questions."""
+        model = model or self.default_model
         if not questions:
             raise ValueError("questions must not be empty")
         if not (0 < temperature <= 100):
@@ -154,7 +164,7 @@ class Engine:
                 "usage": {"billing_units": len(questions), "input_tokens": sum(tokens), "output_tokens": 0}}
 
     def rank(self, state: Any, candidates: list[str], instructions: str | None = None,
-             model: str = DEFAULT_MODEL, temperature: float = 1.0) -> list[dict]:
+             model: str | None = None, temperature: float = 1.0) -> list[dict]:
         """Rank free-form candidate strings against a state (best first).
 
         ``state`` is the context and ``instructions`` the question; the state head sees

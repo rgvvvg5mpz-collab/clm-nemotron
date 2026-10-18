@@ -67,15 +67,21 @@ pip install -e .
 vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b --runner pooling \
     --enable-prefix-caching --max-model-len 8192 --port 8090 &
 
-# 2. CLM API on :8700 with a head trained on Nemotron embeddings
+# 2. CLM API on :8700 (no head yet: serves clm-raw)
+clm-serve
+
+# ...later, with a head trained on Nemotron embeddings (see Fine-tuning)
 clm-serve --ckpt runs/typed/best_head.pt
 ```
 
-No released head exists for Nemotron yet, so step 2 needs one you trained with
-`train/finetune.py --encoder nemotron-3-embed-8b`; `clm-serve` will not start without
-one. To try the encoder on its own first, use the in-process engine with no head and
-`model="clm-raw"` (cosine in the encoder's own space):
-`Engine().answer(state, questions, model="clm-raw")`.
+No released head exists for Nemotron yet. Without `--ckpt`, `clm-serve` serves only
+`clm-raw`: plain cosine similarity in Nemotron's own embedding space, with no
+projection head. The API, client and playground all work, and requests without a
+`model` get `clm-raw`. Rankings are often reasonable, because Nemotron is itself a
+query→passage retriever. The probabilities are uncalibrated, though, so treat them
+as an ordering, not a confidence. Typed and agentic questions are where a trained
+head matters most. The typed-decisions fine-tune prints `clm-raw` accuracy next to
+the trained head's on the same test split, so you can see what the head adds.
 `clm-serve` adds Nemotron's `query: ` prompt to states and `passage: ` to candidates.
 
 States are truncated to 8192 tokens, keeping their end, and candidates keep their start.
@@ -415,7 +421,7 @@ live in the research repo's `main` branch.
 | field | |
 | --- | --- |
 | `state` | string, object or array (objects are rendered as `key: value` text, arrays as `- item` lines; never JSON, the heads are trained on prose) |
-| `model` | `clm-latest` (default), `clm-raw`, or any model from `GET /v1/models` |
+| `model` | `clm-latest`, `clm-raw`, or any model from `GET /v1/models`; default `clm-latest`, or `clm-raw` when no head is served |
 | `questions` | `{id: Question}`, at least one |
 | `temperature` | optional, `(0, 100]`, default 1; divides the logits before the softmax |
 
@@ -449,7 +455,7 @@ files only; every API route above shadows it.
 
 ```json
 {"models": [{"name": "clm-latest", "description": "...", "release_date": "2026-09-19"},
-            {"name": "clm-raw", "description": "Ablation: cosine in the raw encoder space", ...}]}
+            {"name": "clm-raw", "description": "Cosine in the raw encoder embedding space, no projection head; ...", ...}]}
 ```
 
 ### `clm-serve` options

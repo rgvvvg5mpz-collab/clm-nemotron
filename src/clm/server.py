@@ -77,6 +77,9 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
         app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],
                            allow_headers=["*"], allow_credentials=False, expose_headers=["X-CLM-Latency-Ms"])
 
+    def default_model() -> str:
+        return getattr(engine, "default_model", DEFAULT_MODEL)
+
     def auth(authorization: str | None):
         if api_key and authorization != f"Bearer {api_key}":
             raise HTTPException(401, "invalid API key")
@@ -84,7 +87,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
     @app.get("/health")
     def health():
         out = {"ok": True, "embedder": engine.embedder.healthy(),
-               "models": [m["name"] for m in engine.models()],
+               "models": [m["name"] for m in engine.models()], "default_model": default_model(),
                "cache": engine.arena.stats() if engine.arena else None}
         spec = getattr(engine, "encoder", None)
         if spec is not None:            # the playground names the encoder and how to start it
@@ -116,7 +119,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
         t0 = time.perf_counter()
         try:
             out = await asyncio.get_running_loop().run_in_executor(
-                None, engine.answer, body["state"], body["questions"], body.get("model") or DEFAULT_MODEL, temperature)
+                None, engine.answer, body["state"], body["questions"], body.get("model") or default_model(), temperature)
         except ModelNotFound as e:
             raise HTTPException(422, str(e.args[0])) from e
         except (ValueError, KeyError, TypeError, AttributeError) as e:
@@ -149,14 +152,14 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
         try:
             ranked = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: engine.rank(body.get("context") or "", body["answers"], body.get("question"),
-                                          body.get("model") or DEFAULT_MODEL, temperature))
+                                          body.get("model") or default_model(), temperature))
         except ModelNotFound as e:
             raise HTTPException(422, str(e.args[0])) from e
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             raise HTTPException(422, f"invalid request: {e}") from e
         except EmbedderError as e:
             raise HTTPException(502, str(e)) from e
-        return JSONResponse({"model": body.get("model") or DEFAULT_MODEL, "ranked": ranked},
+        return JSONResponse({"model": body.get("model") or default_model(), "ranked": ranked},
                             headers={"X-CLM-Latency-Ms": f"{(time.perf_counter() - t0) * 1000:.1f}"})
 
     # mounted last: the routes above shadow it, everything else is the static UI
@@ -217,9 +220,10 @@ def main() -> None:
                         action_cache=args.action_cache)
     except IncompatibleEncoder as e:
         raise SystemExit(f"[clm] {e}") from e
-    if not engine.heads and not extra:
-        raise SystemExit(f"no checkpoint: pass --ckpt / --ckpt-dir / --model with a head trained on "
-                         f"{spec.hf_id} (train one with train/finetune.py --encoder {spec.name})")
+    if not engine.heads:
+        print(f"[clm] no head: serving clm-raw only (cosine in {spec.hf_id}'s own space, uncalibrated). "
+              f"Train a head with train/finetune.py --encoder {spec.name} and pass --ckpt for clm-latest.",
+              flush=True)
     api_key = os.environ.get("CLM_API_KEY")
     app = create_app(engine, api_key, ui=not args.no_ui, cors=args.cors)
     print(f"[clm] models {[m['name'] for m in engine.models()]} on {device}", flush=True)

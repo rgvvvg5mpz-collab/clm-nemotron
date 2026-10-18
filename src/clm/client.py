@@ -141,7 +141,8 @@ class CLMError(RuntimeError):
 # ----------------------------------------------------------------------------- client
 class CLMClient:
     def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 300.0,
-                 model: str = DEFAULT_MODEL):
+                 model: str | None = None):
+        """``model=None`` lets the server pick (``clm-latest``, or ``clm-raw`` when it has no head)."""
         self.base_url = (base_url or os.environ.get("CLM_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
         self.api_key = api_key or os.environ.get("CLM_API_KEY")
         self.timeout, self.model = timeout, model
@@ -169,8 +170,9 @@ class CLMClient:
                    temperature: float | None = None) -> SystemOneResponse:
         """One request: every question answered against one state.  ``temperature``
         (server default 1.0) flattens (>1) or sharpens (<1) the distributions."""
-        body: dict[str, Any] = {"state": state, "model": model or self.model,
-                                "questions": {k: question_to_dict(q) for k, q in questions.items()}}
+        body: dict[str, Any] = {"state": state, "questions": {k: question_to_dict(q) for k, q in questions.items()}}
+        if model or self.model:
+            body["model"] = model or self.model
         if temperature is not None:
             body["temperature"] = temperature
         j, r = self._post("/v1/systemone", body)
@@ -183,8 +185,9 @@ class CLMClient:
     def rank(self, context: Any, question: str | None, answers: list[str], model: str | None = None,
              temperature: float | None = None) -> list[dict]:
         """Rank ``answers`` for ``context`` + ``question``; -> [{rank, candidate, prob}] best first."""
-        body: dict[str, Any] = {"context": context, "question": question, "answers": list(answers),
-                                "model": model or self.model}
+        body: dict[str, Any] = {"context": context, "question": question, "answers": list(answers)}
+        if model or self.model:
+            body["model"] = model or self.model
         if temperature is not None:
             body["temperature"] = temperature
         j, _ = self._post("/v1/rank", body)

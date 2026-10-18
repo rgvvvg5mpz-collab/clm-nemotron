@@ -234,6 +234,10 @@ async function refreshStatus() {
     setStatus('warn', 'encoder down',
       'clm-serve is up but its /v1/embeddings encoder is not reachable — requests will fail with 502.');
     encoderDown(`clm-serve is up, but its ${encoderLabel()} /v1/embeddings server is not reachable, so every request will fail.`);
+  } else if (models.length === 1 && models[0] === 'clm-raw') {
+    setStatus('warn', 'ready · no head (clm-raw)',
+      `No trained head is loaded, so answers come from raw ${encoderLabel()} cosine similarity and are uncalibrated. ` +
+      'Train a head and restart clm-serve with --ckpt.');
   } else {
     setStatus('ok', models.length ? `ready · ${models.length} model${models.length > 1 ? 's' : ''}` : 'ready',
       'clm-serve and the encoder are both up.');
@@ -256,7 +260,7 @@ function fillModels(models) {
     sel.appendChild(o);
   }
   if (!models.length) sel.innerHTML = '<option value="clm-latest">clm-latest</option>';
-  sel.value = models.some((m) => m.name === want) ? want : sel.options[0].value;
+  sel.value = models.some((m) => m.name === want) ? want : sel.options[0].value;   // first = server default
   S.model = sel.value;
 }
 
