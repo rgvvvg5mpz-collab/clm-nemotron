@@ -1,6 +1,8 @@
 """Heads, the engine, compatibility checks and clm-raw serving."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from helpers import NEMO, OTHER, fake_embedder, save_head
@@ -98,3 +100,24 @@ def test_client_lets_the_server_pick_the_model():
     assert "model" not in client._s.body
     client.system_one("s", {}, model="clm-latest")
     assert client._s.body["model"] == "clm-latest"
+
+
+# ----------------------------------------------------------------------------- model cards
+def test_head_card_reads_release_and_playground_cards(tmp_path):
+    from clm.engine import head_card
+    q = {"label": {"type": "choice", "instructions": "Topic?", "criteria": {"billing": "Money.", "tech": "Bugs."}}}
+    (tmp_path / "a.json").write_text(json.dumps({"questions": q, "test_accuracy": 0.875}))
+    card = head_card(str(tmp_path / "a.pt"))
+    assert card["description"] == "Topic? (billing, tech). 88% on its test set"
+    assert card["questions"][0]["labels"] == ["billing", "tech"] and card["test_accuracy"] == 0.875
+
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "questions.json").write_text(json.dumps(q))
+    (run / "summary.json").write_text(json.dumps({"test": {"acc": 0.5}}))
+    assert head_card(str(run / "best_head.pt"))["test_accuracy"] == 0.5
+
+    (tmp_path / "b.json").write_text(json.dumps({"per_question": {"x": 1, "y": 0}}))
+    assert head_card(str(tmp_path / "b.pt"))["description"].startswith("Answers 2 questions: x, y")
+    (tmp_path / "c.json").write_text("not json")
+    assert head_card(str(tmp_path / "c.pt")) == {} and head_card(str(tmp_path / "none.pt")) == {}

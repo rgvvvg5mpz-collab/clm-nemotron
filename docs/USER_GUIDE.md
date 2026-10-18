@@ -92,7 +92,7 @@ or newer; about 8 GB of free memory and 6 GB of disk. No NVIDIA GPU is required.
 | Area | What it is |
 | --- | --- |
 | **Playground / Train a model** (top) | Switch between asking questions and training your own model |
-| **Status light** (top right) | Green: ready, with the number of models loaded. Click it to check again. |
+| **Status light** (top right) | Green: ready, with the number of models loaded. Click it to see each model, what it answers, its test accuracy and which is the default; click a model to use it. **Check again** re-asks the server. |
 | **Gear** | Connection settings: another server's address, and an API key if the server needs one |
 | **Moon** | Light or dark theme |
 | **Left pane** | Your text and your questions |

@@ -16,6 +16,7 @@ width, the state / candidate prefixes, and which checkpoints may be served.
 from __future__ import annotations
 
 import glob
+import json
 import os
 from typing import Any
 
@@ -103,15 +104,21 @@ class Engine:
         return torch.from_numpy(x).to(self.device)
 
     # ------------------------------------------------------------------ models
-    def models(self) -> list[dict[str, str]]:
+    def models(self) -> list[dict[str, Any]]:
+        """Every served model, with what it answers when the head has a card beside it."""
         desc = {DEFAULT_MODEL: f"Contrastive language model: {self.encoder.hf_id} encoder + trained projection heads",
                 RAW_MODEL: (f"Cosine in the raw {self.encoder.hf_id} embedding space, no projection head; "
                             "scores are uncalibrated")}
         names = ([DEFAULT_MODEL] if DEFAULT_MODEL in self.heads else []) + \
             sorted(n for n in self.heads if n != DEFAULT_MODEL) + [RAW_MODEL]
-        return [{"name": n, "release_date": RELEASE,
-                 "description": desc.get(n) or f"Projection-head checkpoint {os.path.basename(self.heads[n].path)}"}
-                for n in names]
+        out = []
+        for n in names:
+            card = head_card(self.heads[n].path) if n in self.heads else {}
+            out.append({"name": n, "release_date": RELEASE, "kind": "raw" if n == RAW_MODEL else "trained",
+                        "description": desc.get(n) or card.get("description")
+                        or f"Projection-head checkpoint {os.path.basename(self.heads[n].path)}",
+                        **{k: v for k, v in card.items() if k != "description"}})
+        return out
 
     @property
     def default_model(self) -> str:
@@ -175,3 +182,46 @@ class Engine:
         a = self.answer(state, {"rank": q}, model, temperature)["answers"]["rank"]
         order = sorted(a["probabilities"].items(), key=lambda kv: -kv[1])
         return [{"rank": r + 1, "candidate": candidates[int(i)], "prob": p} for r, (i, p) in enumerate(order)]
+
+
+def head_card(path: str) -> dict[str, Any]:
+    """What a head answers, read from the files saved beside it: ``<stem>.json`` (release
+    heads, ``clm-train``) or ``questions.json`` + ``summary.json`` (playground runs).
+    Returns ``{}`` when there is nothing to read; never raises."""
+    stem = os.path.splitext(path)[0]
+    folder = os.path.dirname(path)
+    questions, acc = None, None
+    try:
+        if os.path.exists(stem + ".json"):
+            with open(stem + ".json", encoding="utf-8") as f:
+                card = json.load(f)
+            questions, acc = card.get("questions"), card.get("test_accuracy")
+            if not questions and isinstance(card.get("per_question"), dict):
+                questions = {q: {} for q in card["per_question"]}      # names only
+        elif os.path.exists(os.path.join(folder, "questions.json")):
+            with open(os.path.join(folder, "questions.json"), encoding="utf-8") as f:
+                questions = json.load(f)
+            summary = os.path.join(folder, "summary.json")
+            if os.path.exists(summary):
+                with open(summary, encoding="utf-8") as f:
+                    acc = (json.load(f).get("test") or {}).get("acc")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    if not isinstance(questions, dict) or not questions:
+        return {}
+    qs = [{"name": q, "type": spec.get("type"), "instructions": spec.get("instructions", ""),
+           "labels": list(spec.get("criteria") or {})}
+          for q, spec in questions.items() if isinstance(spec, dict)]
+    if len(qs) == 1:
+        q = qs[0]
+        text = q["instructions"] or q["name"]
+        if q["labels"]:
+            text += " (" + ", ".join(q["labels"]) + ")"
+    else:
+        text = f"Answers {len(qs)} questions: " + ", ".join(q["name"] for q in qs)
+    if isinstance(acc, (int, float)):
+        text += f". {acc:.0%} on its test set"
+    out: dict[str, Any] = {"description": text, "questions": qs}
+    if isinstance(acc, (int, float)):
+        out["test_accuracy"] = round(float(acc), 4)
+    return out

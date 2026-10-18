@@ -192,8 +192,9 @@ function setStatus(cls, text, title) {
   const el = $('#status');
   el.className = 'status ' + cls;
   $('#status-text').textContent = text;
-  if (title) el.title = title;
+  statusNote = cls === 'ok' || cls === 'busy' ? '' : (title || '');
 }
+let statusNote = '';
 
 // The playground assumes the GPU encoder is up; when it is not, say so up front
 // and keep re-checking until it is.  /health names the encoder clm-serve stands
@@ -224,9 +225,12 @@ async function refreshStatus() {
     setStatus('bad', 'no server', `Could not reach ${baseUrl() || 'this origin'}/health — is clm-serve running?`);
     $('#mock-banner').hidden = true;
     encoderDown(`Could not reach clm-serve at ${baseUrl() || location.origin}; start clm-serve and the encoder.`);
+    lastHealth = null;
+    renderModelsPanel();
     return;
   }
   const models = health.models || [];
+  lastHealth = health;
   if (health.encoder) encoder = health.encoder;
   $('#encoder-cmd').textContent = encoder.serve;
   $('#mock-banner').hidden = !health.mock;
@@ -247,6 +251,57 @@ async function refreshStatus() {
     const r = await fetch(url('/v1/models'), { headers: headers(false) });
     if (r.ok) fillModels((await r.json()).models || []);
   } catch (e) { /* the health list is enough */ }
+  renderModelsPanel();
+}
+
+/* The status pill opens a panel naming every loaded model and what it answers. */
+let lastHealth = null;
+let modelInfo = [];
+
+function renderModelsPanel() {
+  const h = lastHealth;
+  const list = $('#mp-list');
+  if (!h) {
+    $('#mp-sub').textContent = 'Not connected to clm-serve.';
+    list.innerHTML = '';
+    return;
+  }
+  $('#mp-note').textContent = statusNote;
+  $('#mp-note').hidden = !statusNote;
+  const known = new Map(modelInfo.map((m) => [m.name, m]));
+  const names = modelInfo.length ? modelInfo.map((m) => m.name) : (h.models || []);
+  $('#mp-sub').textContent = `${names.length} model${names.length === 1 ? '' : 's'} on ${encoderLabel()}` +
+    (h.embedder === false ? ' · encoder not reachable' : '');
+  list.innerHTML = names.map((n) => {
+    const m = known.get(n) || { name: n };
+    const tags = [];
+    if (n === h.default_model) tags.push('<span class="mp-tag">default</span>');
+    if (n === S.model) tags.push('<span class="mp-tag is-on">in use</span>');
+    if (m.kind === 'raw') tags.push('<span class="mp-tag is-warn">untrained</span>');
+    const acc = typeof m.test_accuracy === 'number'
+      ? `<span class="mp-acc" title="Accuracy on the examples held back for testing">${Math.round(m.test_accuracy * 100)}%</span>` : '';
+    return `<li><button type="button" class="mp-item${n === S.model ? ' is-on' : ''}" data-model="${esc(n)}">
+      <span class="mp-row"><span class="mp-name">${esc(n)}</span>${tags.join('')}${acc}</span>
+      <span class="mp-desc">${esc((m.description || '').replace(/\. \d+% on its test set$/, ''))}</span></button></li>`;
+  }).join('');
+}
+
+function toggleModelsPanel(open) {
+  const panel = $('#models-panel');
+  const show = open === undefined ? panel.hidden : open;
+  panel.hidden = !show;
+  $('#status').setAttribute('aria-expanded', String(show));
+  if (show) renderModelsPanel();
+}
+
+function useModel(name) {
+  const sel = $('#model');
+  if (![...sel.options].some((o) => o.value === name)) return;
+  sel.value = name;
+  sel.dispatchEvent(new Event('change'));
+  const play = document.querySelector('.vs-btn[data-view="play"]');
+  if (play && !$('#train-view').hidden) play.click();
+  toggleModelsPanel(false);
 }
 
 function fillModels(models) {
@@ -263,6 +318,7 @@ function fillModels(models) {
   if (!models.length) sel.innerHTML = '<option value="clm-latest">clm-latest</option>';
   sel.value = models.some((m) => m.name === want) ? want : sel.options[0].value;   // first = server default
   S.model = sel.value;
+  modelInfo = models;
 }
 
 /* ───────────────────────────── request building ───────────────────────────── */
@@ -493,7 +549,7 @@ function resultBlock(req, res) {
 function renderAnswers(req, main) {
   renderMeta(main);
   $('#view-answer').innerHTML = resultBlock(req, main);
-  showView('answer');
+  showResultTab('answer');
 }
 
 const HINTS = {
@@ -528,7 +584,7 @@ function showError(e, body) {
       ${fix ? `<div class="err-fix">${fix}</div>` : ''}
     </div>`;
   if (body) renderJson(body);
-  showView('answer');
+  showResultTab('answer');
   $('#meta').hidden = true;
 }
 
@@ -621,7 +677,7 @@ for name, a in r.answers.items():
     print(name, a)`;
 }
 
-function showView(name) {
+function showResultTab(name) {
   $$('.pane-res .tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === name));
   for (const v of ['answer', 'json', 'curl', 'python']) $('#view-' + v).hidden = v !== name;
   $('.pane-body-res').scrollTop = 0;
@@ -889,7 +945,19 @@ function init() {
   for (const [el, k] of [[$('#base-url'), LS.base], [$('#api-key'), LS.key]]) {
     el.addEventListener('change', () => { localStorage.setItem(k, el.value); refreshStatus(); renderCode(); });
   }
-  $('#status').addEventListener('click', refreshStatus);
+  $('#status').addEventListener('click', () => toggleModelsPanel());
+  $('#mp-refresh').addEventListener('click', refreshStatus);
+  $('#mp-list').addEventListener('click', (e) => {
+    const b = e.target.closest('.mp-item');
+    if (b) useModel(b.dataset.model);
+  });
+  document.addEventListener('click', (e) => {
+    if (!$('#models-panel').hidden && !e.target.closest('.status-wrap')) toggleModelsPanel(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#models-panel').hidden) { toggleModelsPanel(false); $('#status').focus(); }
+  });
+  $('#model').addEventListener('change', renderModelsPanel);
 
   // presets
   const psel = $('#preset');
@@ -912,7 +980,7 @@ function init() {
   $$('.pane-req .tab').forEach((t) => t.addEventListener('click', () => {
     S.mode = t.dataset.mode; paint(); save(); renderCode();
   }));
-  $$('.pane-res .tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
+  $$('.pane-res .tab').forEach((t) => t.addEventListener('click', () => showResultTab(t.dataset.view)));
 
   // fields
   $('#state').addEventListener('input', (e) => { S.state = e.target.value; updateCount(); save(); });

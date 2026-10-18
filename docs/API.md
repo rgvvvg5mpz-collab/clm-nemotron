@@ -38,9 +38,16 @@ files only; every API route above shadows it.
 ## `GET /v1/models`
 
 ```json
-{"models": [{"name": "clm-latest", "description": "...", "release_date": "2026-09-19"},
-            {"name": "clm-raw", "description": "Cosine in the raw encoder embedding space, no projection head; ...", ...}]}
+{"models": [{"name": "support-topic-1b", "kind": "trained", "release_date": "2026-09-19",
+             "description": "What is this customer conversation primarily about? (account, billing, ...). 88% on its test set",
+             "questions": [{"name": "label", "type": "choice", "instructions": "...", "labels": ["account", "billing", "..."]}],
+             "test_accuracy": 0.88},
+            {"name": "clm-raw", "kind": "raw", "description": "Cosine in the raw encoder embedding space, no projection head; ...", ...}]}
 ```
+
+`questions` and `test_accuracy` come from the card saved beside the head (`<name>.json`, or
+`questions.json` + `summary.json` for a playground run); they are left out when there is none.
+The playground's status light lists these when clicked.
 
 ## Training routes (`/v1/train/*`)
 
