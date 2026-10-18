@@ -44,6 +44,8 @@ mac = ["sentence-transformers>=5.4.1"]
 test = ["pytest>=8", "httpx>=0.25", "pyflakes>=3"]
 # research/examples/t_rex: persistent HTTP client for the real-time player
 examples = ["httpx>=0.25"]
+# clm-export to s3://… buckets
+s3 = ["boto3>=1.34"]
 
 [project.scripts]
 clm-serve = "clm.server:main"
@@ -51,6 +53,7 @@ clm-train = "clm.train_cli:main"
 clm-download = "clm.heads:download_main"
 clm-encoder = "clm.local_encoder:main"
 clm-benchmark = "clm.benchmark:main"
+clm-export = "clm.export:main"
 
 [project.urls]
 Homepage = "https://github.com/rgvvvg5mpz-collab/clm-nemotron"

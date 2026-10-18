@@ -29,22 +29,24 @@ def main():
         page = browser.new_page(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
         page.goto(BASE + "/")
         page.wait_for_selector("#status.ok, #status.warn", timeout=30000)
-        page.evaluate(studio.OVERLAY_JS)
-        page.evaluate("() => { document.getElementById('studio-cursor').style.display = 'none'; }")
-
-        def ring(sel):
-            page.evaluate("s => window.__studio.ring(s)", sel)
+        page.evaluate(studio.OVERLAY_JS, [1, True])          # no zoom, no cursor
+        # the studio hides the app's own tooltips while recording; the guide wants one shot of them
+        tips = "v => { let s = document.getElementById('guide-tips'); if (!s) { s = document.createElement('style'); s.id = 'guide-tips'; document.head.appendChild(s); } s.textContent = v ? '#tip-bubble{display:block!important}' : ''; }"
 
         def shot(name, sel=None, wait=500):
-            ring(sel)
+            """Screenshot with `sel` spotlit (dimmed surroundings, gold frame, no callout)."""
+            if sel:
+                page.evaluate("s => window.__studio.spot(s, '', '', 8)", sel)
             page.wait_for_timeout(wait)
             page.screenshot(path=os.path.join(OUT, name))
-            ring(None)
+            page.evaluate("() => window.__studio.unspot()")
             print("  ", name)
 
         shot("01-playground.png")
+        page.evaluate(tips, True)
         page.hover('label[for="state"] + .tip-q'); page.wait_for_timeout(900)
         shot("02-tooltip.png")
+        page.evaluate(tips, False)
         page.mouse.move(700, 880)
         page.select_option("#model", "typed-decisions-1b")
         page.click("#run"); page.wait_for_selector("#view-answer .ans")
@@ -83,6 +85,9 @@ def main():
         page.click("#t-try-go"); page.wait_for_selector("#t-try-out .ans")
         page.evaluate("document.querySelector('#t-try').scrollIntoView({block: 'start'})")
         shot("13-train-try.png", "#t-try-out")
+        page.evaluate("document.querySelector('#t-export').scrollIntoView({block: 'center'})")
+        page.fill("#t-export-dest", "exports/")
+        shot("16-train-export.png", "#t-export")
         page.evaluate("document.querySelector('#t-models').scrollIntoView({block: 'end'})")
         shot("14-models-list.png", "#t-models")
         page.click("#t-open"); page.wait_for_timeout(800)

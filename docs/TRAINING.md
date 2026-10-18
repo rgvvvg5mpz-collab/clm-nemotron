@@ -125,6 +125,12 @@ Trained heads are very confident. Calibrate a temperature and any thresholds on
 held-out data before a probability gates anything. A running `clm-serve` reloads
 `best_head.pt` when the file changes.
 
+To move the model elsewhere, export it: `clm-export runs/tickets/best_head.pt ./exports
+--name tickets` writes `tickets.pt`, `tickets.json` (encoder, questions, accuracy,
+hashes) and `tickets.sha256`; `clm-export tickets s3://bucket/prefix/` uploads the same
+to S3 (`pip install boto3`). The other server loads it with `--model tickets=tickets.pt`
+and must run the same encoder.
+
 ## Errors
 
 | Message contains | Fix |

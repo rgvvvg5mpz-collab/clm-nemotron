@@ -60,8 +60,8 @@ print(r.answers["label"].choice)        # delivery
 | Folder | For | Start with |
 | --- | --- | --- |
 | [`docs/`](docs/) | Everyone | [User guide](docs/USER_GUIDE.md) (step by step, with screenshots) · [Training](docs/TRAINING.md) · [API](docs/API.md) |
-| [`Crew Training/`](Crew%20Training/) | New users and trainers | The 5-minute training video, exercises and a knowledge check |
-| [`Marketing/`](Marketing/) | Executives | The briefing deck and 3-minute video (2:51): cost, accuracy, latency against frontier models |
+| [`Crew Training/`](Crew%20Training/) | New users and trainers | The 6-minute training video (1080p, spotlight walkthrough of the UI), exercises and a knowledge check |
+| [`Marketing/`](Marketing/) | Executives | The briefing deck and 3-minute video (3:04, animated, with a live demo): cost, accuracy, latency against frontier models |
 | [`Model Governance/`](Model%20Governance/) | Risk, compliance, architecture | Architecture, model inventory and cards, data lineage, evaluation, risks, sourcing policy |
 | [`Claude Code/`](Claude%20Code/) | Developers and operators | `scripts/`: setup, start, stop, status, tests, model release. `tools/`: builders for the videos, deck, screenshots and frontier benchmark |
 | [`src/clm/`](src/clm/) | Developers | The product. Commands: `clm-serve` (API and playground), `clm-train`, `clm-encoder` (the Nemotron encoder server), `clm-benchmark` |

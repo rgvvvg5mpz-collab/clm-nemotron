@@ -280,9 +280,10 @@ function renderModelsPanel() {
     if (m.kind === 'raw') tags.push('<span class="mp-tag is-warn">untrained</span>');
     const acc = typeof m.test_accuracy === 'number'
       ? `<span class="mp-acc" title="Accuracy on the examples held back for testing">${Math.round(m.test_accuracy * 100)}%</span>` : '';
-    return `<li><button type="button" class="mp-item${n === S.model ? ' is-on' : ''}" data-model="${esc(n)}">
+    const dl = m.kind === 'raw' ? '' : `<button type="button" class="mp-dl" data-dl="${esc(n)}" data-tip="Download ${esc(n)} as a .tar.gz: the model, its card and checksums." aria-label="Download ${esc(n)}">↓</button>`;
+    return `<li class="mp-li"><button type="button" class="mp-item${n === S.model ? ' is-on' : ''}" data-model="${esc(n)}">
       <span class="mp-row"><span class="mp-name">${esc(n)}</span>${tags.join('')}${acc}</span>
-      <span class="mp-desc">${esc((m.description || '').replace(/\. \d+% on its test set$/, ''))}</span></button></li>`;
+      <span class="mp-desc">${esc((m.description || '').replace(/\. \d+% on its test set$/, ''))}</span></button>${dl}</li>`;
   }).join('');
 }
 
@@ -948,6 +949,8 @@ function init() {
   $('#status').addEventListener('click', () => toggleModelsPanel());
   $('#mp-refresh').addEventListener('click', refreshStatus);
   $('#mp-list').addEventListener('click', (e) => {
+    const dl = e.target.closest('.mp-dl');
+    if (dl) { e.stopPropagation(); if (window.downloadModel) window.downloadModel(dl.dataset.dl, dl); return; }
     const b = e.target.closest('.mp-item');
     if (b) useModel(b.dataset.model);
   });

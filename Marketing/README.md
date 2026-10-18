@@ -5,9 +5,9 @@ high-volume classification (cost, accuracy, latency, control), and where it does
 
 | File | What it is |
 | --- | --- |
-| [`CLM-Executive-Briefing.pptx`](CLM-Executive-Briefing.pptx) | 10-slide deck, editable: native text, charts and table, with the narration as speaker notes |
+| [`CLM-Executive-Briefing.pptx`](CLM-Executive-Briefing.pptx) | 10-slide deck, editable: native text, charts and table, with the narration as speaker notes (dark theme, same palette as the video) |
 | [`CLM-Executive-Briefing.pdf`](CLM-Executive-Briefing.pdf) | The same deck as PDF |
-| [`CLM-Executive-Briefing-Video.mp4`](CLM-Executive-Briefing-Video.mp4) | 2:51 narrated video of the deck, 1080p, English subtitles built in |
+| [`CLM-Executive-Briefing-Video.mp4`](CLM-Executive-Briefing-Video.mp4) | 3:04 narrated video, 1920×1080 at 30 fps: the slides animated (builds, growing bars, count-ups) with a live 15-second demo of the real playground after slide 3; English subtitles built in |
 | [`CLM-Executive-Briefing-Video.srt`](CLM-Executive-Briefing-Video.srt) | Subtitles / transcript |
 | [`slides/`](slides/) | Each slide as a 1920×1080 PNG, for email or chat |
 | [`benchmark/`](benchmark/) | The measurements behind the numbers |
@@ -22,7 +22,7 @@ high-volume classification (cost, accuracy, latency, control), and where it does
 4. **Speed (measured):** 33 ms median on one laptop; about 36 answers a second, 3 million a day.
 5. **Cost:** about $8 per million decisions on own hardware, against $58 (Haiku 5.5),
    $1,160 (Sonnet 5.5) and $2,320 (Opus 5.5) at list prices.
-6. **Control:** data stays inside; reproducible; governance pack included.
+6. **Control:** data stays inside; reproducible; models export to disk or S3 with checksums; governance pack included.
 7. **Use each where strongest:** CLM for fixed labels at volume; frontier models for open
    questions, writing and reasoning; or both, with CLM escalating its uncertain cases.
 8. **Ask:** a four-week pilot on one workflow, with 500 real labelled examples.
@@ -66,5 +66,7 @@ With CLM running (`bash "Claude Code/scripts/start.sh"`):
 .venv/bin/python "Claude Code/tools/build_marketing.py"
 ```
 
-Needs Playwright, python-pptx, macOS `say` and ffmpeg. Narration speed: `STUDIO_RATE`
-(words per minute, the video uses 174); voice: `STUDIO_VOICE`.
+Needs Playwright, python-pptx, macOS `say`, ffmpeg, and a running CLM for the live scene
+(`MARKETING_NO_DEMO=1` skips it). The video is captured at 3840×2160 straight from Chrome
+through `Claude Code/tools/studio.py` and delivered at 1080p; a build takes about 5 minutes.
+Narration speed: `STUDIO_RATE` (words per minute, default 176); voice: `STUDIO_VOICE`.

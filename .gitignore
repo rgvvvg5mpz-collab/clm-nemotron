@@ -31,3 +31,6 @@ logs/
 
 # macOS
 .DS_Store
+
+# model exports made from the playground or export-model.sh
+exports/

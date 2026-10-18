@@ -558,8 +558,37 @@ function renderResults() {
       </div>
       ${j.checkpoint ? `<p class="note">Saved at <code>${esc(j.checkpoint_display || j.checkpoint)}</code>. Another server can load it with
         <code>clm-serve --encoder ${esc(j.encoder)} --model ${esc(j.model)}=${esc(j.checkpoint_display || j.checkpoint)}</code>.</p>` : ''}
+    </div>
+    <div class="use export" id="t-export"><h3>Export it${tipQ('An export is three files: the trained model (.pt), a card saying what it answers and how well (.json), and checksums (.sha256). Another CLM server loads the .pt directly; it must run the same encoder.')}</h3>
+      <p>Take it to another server, a model registry or a backup: <code>${esc(j.model)}.pt</code>, <code>${esc(j.model)}.json</code> (what it answers, test accuracy, encoder) and <code>${esc(j.model)}.sha256</code>.</p>
+      <div class="actions">
+        <button type="button" class="btn-ghost" id="t-download" data-tip="Download the three files as one .tar.gz to this computer.">Download (.tar.gz)</button>
+        <input type="text" id="t-export-dest" class="export-dest" spellcheck="false" placeholder="Folder on the server, or s3://bucket/prefix/" data-tip="Where the server should write the files: a folder path on the machine running CLM, or an S3 location such as s3://my-bucket/clm/models/. S3 uses the server's AWS credentials.">
+        <button type="button" class="btn-primary" id="t-export-go" data-tip="Write the three files to that folder or bucket.">Export</button>
+      </div>
+      <div id="t-export-out" class="export-out"></div>
     </div>`;
   box.innerHTML = html;
+
+  $('#t-download').addEventListener('click', () => downloadModel(j.model, $('#t-download')));
+  $('#t-export-go').addEventListener('click', async () => {
+    const dest = $('#t-export-dest').value.trim();
+    const out = $('#t-export-out');
+    if (!dest) { out.innerHTML = '<p class="why-not">Give a folder on the server, or an s3:// location.</p>'; $('#t-export-dest').focus(); return; }
+    $('#t-export-go').disabled = true;
+    out.innerHTML = '<p class="why-not">Exporting…</p>';
+    try {
+      const { json } = await post(`/v1/models/${encodeURIComponent(j.model)}/export`, { dest });
+      out.innerHTML = `<div class="export-done"><b>Exported to <code>${esc(json.dest_display || json.dest)}</code></b><ul>${
+        json.files.map((f) => `<li><code>${esc(f.name)}</code> <span class="hint">${fmtBytes(f.size)}</span></li>`).join('')}</ul>
+        <p class="hint">Serve it elsewhere: <code>clm-serve --encoder ${esc(j.encoder)} --model ${esc(j.model)}=${esc(json.files[0].display || json.files[0].location)}</code></p></div>`;
+      toast(`Exported ${j.model}`);
+    } catch (e) {
+      out.innerHTML = `<div class="t-err"><b>Couldn't export.</b> ${esc(e.message)}</div>`;
+    } finally {
+      $('#t-export-go').disabled = false;
+    }
+  });
 
   const tryText = () => ($('#t-try') ? $('#t-try').value.trim() : '');
   if (!typed) {
@@ -592,6 +621,30 @@ function renderResults() {
 }
 
 /* ───────────────────────────── models list ───────────────────────────── */
+
+/* Download a served model as <name>.tar.gz. A fetch (not a plain link) so the API key travels with it. */
+async function downloadModel(name, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(url(`/v1/models/${encodeURIComponent(name)}/download`), { headers: headers(false) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `${name}.tar.gz`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(`Downloading ${name}.tar.gz`);
+  } catch (e) {
+    toast(`Couldn't download ${name}: ${e.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+window.downloadModel = downloadModel;      // app.js: the models panel's download buttons
+
+function fmtBytes(n) {
+  return n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' kB' : n + ' B';
+}
 
 async function refreshModels() {
   try {
@@ -632,6 +685,13 @@ async function loadJobs() {
   const running = jobs.find((j) => ['queued', 'running'].includes(j.status));
   if (running && !T.pollTimer && (!T.job || T.job.id === running.id)) {
     T.job = running; renderAll(); startPolling();
+  }
+  if (T.wantModel) {                                   // deep link: #train=NAME
+    const j = jobs.find((x) => x.model === T.wantModel && x.status === 'done');
+    if (j) {
+      T.wantModel = null; T.job = j; renderAll();
+      setTimeout(() => $('#t-step-4').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
   }
 }
 
@@ -681,7 +741,9 @@ window.onHealth = (health) => {
   $('#viewswitch').hidden = !can;
   if (!can && !$('#train-view').hidden) showView('play');
   if (can && !was) {
-    let want = location.hash === '#train' ? 'train' : '';
+    const link = /^#train(?:=(.+))?$/.exec(location.hash);      // #train opens this view; #train=NAME opens that model's results
+    let want = link ? 'train' : '';
+    if (link && link[1]) T.wantModel = decodeURIComponent(link[1]);
     if (!want) { try { want = localStorage.getItem('clm.playground.view') || ''; } catch (e) { /* ignore */ } }
     if (want === 'train') showView('train');
   }

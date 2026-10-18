@@ -18,6 +18,7 @@ Run them from the repo root. They are idempotent.
 | "run the tests" | `bash "Claude Code/scripts/test.sh"` | the pass/fail count |
 | "update the models", "re-download models" | `bash "Claude Code/scripts/fetch-models.sh" --force` | what it installed |
 | "train a classifier on FILE" | see "Training" in `Claude Code/RUNBOOK.md` | test accuracy against the baselines |
+| "export MODEL to DEST" (a folder or `s3://bucket/prefix/`) | `bash "Claude Code/scripts/export-model.sh" MODEL DEST` | the three files it wrote and the `clm-serve --model` line to load them elsewhere |
 
 `start.sh` does everything on first run: it creates `.venv` (`setup.sh`), downloads and
 verifies the models from this repo's GitHub release `models-v1` (`fetch-models.sh`, about

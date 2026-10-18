@@ -266,6 +266,20 @@ training**.
 
 ![The trained model in the playground](images/guide/15-playground-trained.png)
 
+**Export it** to take the model somewhere else: another CLM server, a model registry, a
+backup. An export is three files: `NAME.pt` (the model), `NAME.json` (its card: which
+encoder it needs, its questions and labels, its test accuracy) and `NAME.sha256`
+(checksums).
+
+![Exporting a model](images/guide/16-train-export.png)
+
+- **Download (.tar.gz)** saves the three files to your computer.
+- Type a **folder on the server** (for example `exports/`) or an **S3 location**
+  (`s3://my-bucket/clm/models/`) and press **Export**. S3 uses the server's AWS
+  credentials; the page lists each file it wrote.
+- The **↓** beside any model in the status-light list downloads that model the same way.
+- With Claude Code: *export ticket-topic to s3://my-bucket/clm/models/*.
+
 ---
 
 ## 7. Use a model from code
@@ -324,9 +338,10 @@ data sources change.
 - **Models that ship with CLM** (`support-topic-1b`, `typed-decisions-1b`) are in
   `models/heads/`. They're demos.
 - **To retire a model:** stop the service, delete its folder in `runs/playground/`, start again.
-- **To share a model** with another CLM server: copy its `best_head.pt` and
-  `questions.json`, and start that server with `--model NAME=path/to/best_head.pt`. It
-  must use the same encoder; CLM refuses a mismatch.
+- **To share a model** with another CLM server: export it (section 6, Step 4, or ask
+  Claude Code to *export NAME to DEST*), copy `NAME.pt` over, and start that server with
+  `--model NAME=path/to/NAME.pt`. It must use the same encoder; the card says which, and
+  CLM refuses a mismatch. `shasum -a 256 -c NAME.sha256` checks the copy arrived intact.
 
 ---
 

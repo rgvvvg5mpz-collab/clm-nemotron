@@ -1,12 +1,12 @@
 # Crew Training: classifying text with CLM
 
-A 5-minute video plus hands-on exercises. After this session, crew members can start CLM,
-ask it questions, train a classifier on labelled data, and judge whether it is good enough
-to use.
+A 6-minute video plus hands-on exercises. After this session, crew members can start CLM,
+ask it questions, train a classifier on labelled data, judge whether it is good enough to
+use, and export it to another machine or to S3.
 
 | File | What it is |
 | --- | --- |
-| [`CLM-Crew-Training.mp4`](CLM-Crew-Training.mp4) | The video: 5:08, 1280×800, narrated, with English subtitles built in (switch them on in your player) |
+| [`CLM-Crew-Training.mp4`](CLM-Crew-Training.mp4) | The video: 5:52, 1920×1080 at 30 fps, narrated. Every control is explained with a spotlight and a callout as the tour reaches it; English subtitles built in (switch them on in your player) |
 | [`CLM-Crew-Training.srt`](CLM-Crew-Training.srt) | The subtitles as a separate file; also a full transcript |
 | Sources | Recorded from the real application by [`Claude Code/tools/make_training_video.py`](../Claude%20Code/tools/make_training_video.py); see "Regenerating the video" below |
 
@@ -22,27 +22,30 @@ training run on the bundled sample data. Reference material for afterwards:
 4. Write label descriptions the model can use, and fix weak ones.
 5. Train a model and judge it against both baselines, allowing for chance.
 6. Use the model from the playground or from code, and know when it is *not* ready for real decisions.
+7. Export a model (download, server folder or S3) and load it on another CLM server.
 
 ## Chapters
 
 | Time | Chapter |
 | ---: | --- |
-| 0:01 | Welcome and agenda |
+| 0:00 | Welcome and agenda |
 | 0:17 | What CLM is, and what it isn't for |
 | 0:45 | Starting the service with Claude Code |
-| 1:05 | Playground tour, tooltips |
-| 1:20 | Asking questions |
-| 1:35 | Reading answers; JSON and Python tabs |
-| 1:56 | Train a model: the four steps |
-| 2:08 | Step 1: preparing your data |
-| 2:29 | Step 1: loading the sample, checking columns and labels |
-| 2:48 | Step 2: describing labels, and the live hints |
-| 3:08 | Step 3: training and the progress chart |
-| 3:32 | Step 4: reading the results against the baselines |
-| 3:56 | Trying the model on new text |
-| 4:06 | Using it: playground, Python, curl |
-| 4:21 | Six habits for your own data |
-| 4:45 | Governance: demos versus real decisions |
+| 1:05 | Playground tour: the two views, the status light, the model list |
+| 1:26 | Asking questions: state, question types, model |
+| 1:42 | Reading answers; JSON and Python tabs |
+| 2:02 | Train a model: the four steps |
+| 2:14 | Step 1: preparing your data |
+| 2:34 | Step 1: loading the sample, columns, Group by, label counts |
+| 2:58 | Step 2: describing labels, and the live hints |
+| 3:17 | Step 3: training and the progress chart |
+| 3:41 | Step 4: the headline and the two baselines |
+| 4:04 | Trying the model on new text |
+| 4:12 | Using it: playground, Python, curl |
+| 4:26 | Exporting it: download, server folder, S3; the three files |
+| 4:58 | The new model in the playground |
+| 5:04 | Six habits for your own data |
+| 5:28 | Governance: demos versus real decisions |
 
 ## Hands-on exercises (about 30 minutes)
 
@@ -62,7 +65,11 @@ the `refund` description vague ("Refunds"), name the model `ex3-vague`, and trai
 restore the description, name it `ex3-clear`, and train again. *Compare the two
 accuracies. Which baselines did each beat?*
 
-**4. Your own data (10 min).** Make a small CSV (at least 3 labels × 10 rows) from text
+**4. Export and verify (5 min).** In Step 4 of `ex3-clear`, type `exports/` as the destination
+and press **Export**. In a terminal, run `shasum -a 256 -c exports/ex3-clear.sha256`. *Open
+`exports/ex3-clear.json`: which encoder does the model need, and what was its accuracy?*
+
+**5. Your own data (10 min).** Make a small CSV (at least 3 labels × 10 rows) from text
 you know: email subjects, ticket titles, product reviews. Include a `customer` column if
 rows come from the same person. Train it with **Group by** set. *Does it beat "always the
 most common label" by more than the "give or take" margin?*
@@ -76,6 +83,7 @@ most common label" by more than the "give or take" margin?*
 4. A trained model says 99.9%. What does that tell you, and what doesn't it?
 5. When should you use a large language model instead of CLM?
 6. What must happen before a model you trained makes real decisions?
+7. You export a model and copy it to a server that runs the 8B encoder. What happens, and why?
 
 <details><summary>Answers</summary>
 
@@ -89,6 +97,8 @@ most common label" by more than the "give or take" margin?*
 5. Open questions, writing or summarising, multi-step reasoning, or labels that change on every request.
 6. Human-labelled data, calibration, a spot check on real examples, and the new model
    checklist in `Model Governance/`.
+7. `clm-serve` refuses to load it: a head only works with the encoder it was trained on, and
+   the export's card records which one that was.
 </details>
 
 ## Facilitator notes
@@ -101,7 +111,13 @@ most common label" by more than the "give or take" margin?*
 
 ## Regenerating the video
 
-After a UI change, with CLM running:
+After a UI change, with CLM running. Reset first so the video shows a first-time training at
+real speed (it deletes the previous `ticket-topic` run and the embedding cache):
+
+```bash
+bash "Claude Code/scripts/stop.sh"; rm -rf runs/playground/2*-* runs/playground/embeddings exports; bash "Claude Code/scripts/start.sh"
+```
+
 
 ```bash
 .venv/bin/pip install playwright && .venv/bin/python -m playwright install chromium
@@ -116,4 +132,7 @@ After a UI change, with CLM running:
 ```
 
 The narration uses macOS's built-in speech ("Ava (Premium)" by default, `STUDIO_VOICE` to
-change it) and needs `ffmpeg`. A run takes about 6 minutes and trains one model.
+change it) and needs `ffmpeg`. The page is captured at 3200×1800 straight from Chrome and
+delivered at 1080p; spotlights, callouts and zooms come from `Claude Code/tools/studio.py`.
+A run takes about 8 minutes and trains one model. `STUDIO_DRY=1` walks every step in a
+minute without speech or frames, to check the script after a UI change.

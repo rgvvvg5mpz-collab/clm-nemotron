@@ -7,6 +7,7 @@
       "Bash(bash \"Claude Code/scripts/test.sh\":*)",
       "Bash(bash \"Claude Code/scripts/setup.sh\":*)",
       "Bash(bash \"Claude Code/scripts/fetch-models.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/export-model.sh\":*)",
       "Bash(curl -s localhost:8700:*)",
       "Bash(curl -s http://localhost:8700:*)",
       "Bash(tail -n:*)"

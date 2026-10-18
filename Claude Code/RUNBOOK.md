@@ -91,6 +91,34 @@ new model and kept in `runs/playground/`. Full walk-through: `docs/USER_GUIDE.md
   holds the question to send.
 - All options: `docs/TRAINING.md`.
 
+## Exporting a model
+
+A trained model leaves as three files: `NAME.pt` (the heads), `NAME.json` (its card:
+encoder, questions and labels, test accuracy, hashes) and `NAME.sha256`. To a folder:
+
+```bash
+bash "Claude Code/scripts/export-model.sh" ticket-topic ./exports
+```
+
+To an S3 bucket (installs `boto3` on first use; credentials come from the environment,
+`~/.aws` or an instance role; `--endpoint-url` for MinIO and other S3-compatible stores):
+
+```bash
+bash "Claude Code/scripts/export-model.sh" ticket-topic s3://my-bucket/clm/models/
+```
+
+- `NAME` is any served model: one in `models/heads/` or one trained in the playground
+  (`runs/playground/`). A checkpoint path works too. `--name NEW` renames the export;
+  `--archive` writes one `NAME.tar.gz` instead (folders only).
+- The same is in the playground: **Train a model → Export it** (a Download button for
+  this computer, a destination box for a server folder or `s3://`), and the **↓** next to
+  each model in the status-light list. API: `GET /v1/models/NAME/download`,
+  `POST /v1/models/NAME/export {"dest": ...}`.
+- Load it on another server with `clm-serve --encoder ENCODER --model NAME=/path/NAME.pt`
+  (or drop the files into that server's `--ckpt-dir`). It must run the same encoder; the
+  card records which, and `clm-serve` refuses a mismatch. Verify a copy with
+  `shasum -a 256 -c NAME.sha256`.
+
 ## Bigger encoder (optional, NVIDIA GPU)
 
 The 8B encoder is more accurate but needs about 18 GB of GPU memory and downloads from

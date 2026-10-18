@@ -30,6 +30,8 @@ Then open **http://localhost:8700/**. Later starts take seconds.
 | run the tests | the automated test suite (about 5 seconds) |
 | train a classifier on data/tickets.csv | trains from the command line and reports accuracy |
 | re-download the models | fetches and verifies the release again |
+| export ticket-topic to ./exports | writes the model, its card and checksums to that folder |
+| export ticket-topic to s3://my-bucket/clm/ | the same three files, uploaded with the machine's AWS credentials |
 
 You can also train in the browser: open the playground and choose **Train a model**.
 The [user guide](../docs/USER_GUIDE.md) walks through it with screenshots.

@@ -26,6 +26,9 @@ data source is added; or the encoder changes (heads must always be retrained the
 ## Change control
 
 1. Train on approved data and save the run folder (`best_head.pt`, `questions.json`, `summary.json`).
+   Hand the model on only as an export (`clm-export`, or the playground's **Export it**):
+   `NAME.pt` with its card `NAME.json` (encoder identity, questions, test accuracy, SHA-256)
+   and `NAME.sha256`. Exports to S3 go to a bucket with versioning and access logging on.
 2. The validator completes the [new model checklist](templates/new-model-checklist.md).
 3. Add the head to the inventory (doc 02), write its model card and log it in doc 08.
 4. Ship it in a new model release (`build-model-release.sh`, tag `models-vN`) and update

@@ -20,16 +20,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import tempfile
+import shutil
 import time
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .embedder import EmbedderError
 from .encoders import ENCODERS, IncompatibleEncoder, get_encoder
-from .engine import DEFAULT_MODEL, Engine, ModelNotFound
+from .engine import DEFAULT_MODEL, Engine, ModelNotFound, RAW_MODEL
 from .heads import default_device
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -109,6 +111,46 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
     def models(authorization: str | None = Header(default=None)):
         auth(authorization)
         return {"models": engine.models()}
+
+    def head_of(name: str):
+        """The served head behind `name`, or 404 / 422 when there is nothing to export."""
+        heads = getattr(engine, "heads", {})
+        if name not in heads:
+            if name == RAW_MODEL:
+                raise HTTPException(422, "clm-raw has no trained head to export")
+            raise HTTPException(404, f"unknown model {name!r}; available: {[m['name'] for m in engine.models()]}")
+        return heads[name]
+
+    @app.get("/v1/models/{name}/download")
+    def model_download(name: str, authorization: str | None = Header(default=None)):
+        """The model as one <name>.tar.gz: its head, card and checksums."""
+        from starlette.background import BackgroundTask
+        from .export import ExportError, archive
+        auth(authorization)
+        head = head_of(name)
+        tmp = tempfile.mkdtemp(prefix="clm-dl-")
+        try:
+            path = archive(head.path, name, os.path.join(tmp, f"{name}.tar.gz"))
+        except ExportError as e:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise HTTPException(422, str(e)) from e
+        return FileResponse(path, media_type="application/gzip", filename=f"{name}.tar.gz",
+                            background=BackgroundTask(shutil.rmtree, tmp, True))
+
+    @app.post("/v1/models/{name}/export")
+    async def model_export(name: str, request: Request, authorization: str | None = Header(default=None)):
+        """{dest, endpoint_url?} -> the files written to a folder on this machine or an s3:// bucket."""
+        from .export import ExportError, export_model
+        auth(authorization)
+        head = head_of(name)
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("dest"), str):
+            raise HTTPException(422, "body must be {dest: folder or s3://bucket/prefix/}")
+        try:
+            return await asyncio.get_running_loop().run_in_executor(
+                None, export_model, head.path, body["dest"], name, body.get("endpoint_url") or None)
+        except ExportError as e:
+            raise HTTPException(422, str(e)) from e
 
     @app.post("/v1/systemone")
     async def systemone(request: Request, authorization: str | None = Header(default=None)):

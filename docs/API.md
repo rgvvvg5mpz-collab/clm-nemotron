@@ -49,6 +49,16 @@ files only; every API route above shadows it.
 `questions.json` + `summary.json` for a playground run); they are left out when there is none.
 The playground's status light lists these when clicked.
 
+## Export routes
+
+| Route | Body / result |
+| --- | --- |
+| `GET /v1/models/{name}/download` | `{name}.tar.gz` (`application/gzip`) holding `{name}.pt`, `{name}.json` and `{name}.sha256` |
+| `POST /v1/models/{name}/export` | `{"dest": "folder on the server" \| "s3://bucket/prefix/", "endpoint_url"?: "..."}` → `{name, dest, files: [{name, size, location}], card}`. S3 needs `boto3` and credentials on the server. 404 for an unknown model, 422 for `clm-raw` or an unusable destination. |
+
+The card (`{name}.json`) records the encoder identity, the questions and labels, test
+accuracy, the head's shape and the `.pt` file's SHA-256. Command line: `clm-export`.
+
 ## Training routes (`/v1/train/*`)
 
 Used by the playground's **Train a model** view; off with `clm-serve --no-train`. All take
