@@ -81,7 +81,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
     <p class="lede">CLM answers a question about a state by scoring each candidate answer against that state with two small trained networks that sit on top of a frozen NVIDIA Nemotron embedding model. Nothing generates text; every answer is a softmax over cosine similarities.</p>
     <nav class="nav" aria-label="Pages">
       <a href="#request">Request path</a><a href="#texts">What gets embedded</a><a href="#parity">Training and serving</a><a href="#components">Components</a><a href="#encoders">Encoders</a><a href="#rules">Compatibility rules</a>
-      <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w">Classification guide →</a>
+      <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w">Classification guide →</a><a href="https://claude.ai/artifact/JjFHh3mKhCvx8XgciVy47F">Training →</a>
     </nav>
   </header>
 
@@ -274,7 +274,11 @@ What is this customer conversation primarily about?</span>
           <tr><td><code>src/clm/cache.py</code></td><td>A fixed device-memory arena for projected vectors, keyed by head generation.</td></tr>
           <tr><td><code>src/clm/server.py</code></td><td>FastAPI app <code>clm-serve</code>: <code>/v1/systemone</code>, <code>/v1/rank</code>, <code>/v1/models</code>, <code>/health</code>, and the playground.</td></tr>
           <tr><td><code>tools/local_embed_server.py</code></td><td><code>/v1/embeddings</code> on Apple silicon or CPU via sentence-transformers. It behaves like vLLM where callers depend on it.</td></tr>
-          <tr><td><code>train/finetune.py</code></td><td>Trains heads on typed questions (<code>--task choice</code>) or agent traces (<code>--task clm</code>) and stamps the encoder into the checkpoint.</td></tr>
+          <tr><td><code>src/clm/train_cli.py</code></td><td><code>clm-train</code>: trains a head from <code>text,label</code> rows or typed rows, holds out test and validation by group, and prints the serve command (<a href="https://claude.ai/artifact/JjFHh3mKhCvx8XgciVy47F">training page</a>).</td></tr>
+          <tr><td><code>src/clm/trainer.py</code></td><td>The training loop shared by <code>clm-train</code> and <code>finetune.py --task choice</code>: embeds once into a cache, trains the heads, keeps the best epoch, scores it next to <code>clm-raw</code> and the majority label.</td></tr>
+          <tr><td><code>src/clm/typed_data.py</code></td><td>Reads CSV, JSONL, JSON and parquet rows, converts <code>text,label</code> into typed rows, and splits by group.</td></tr>
+          <tr><td><code>src/clm/embed_backends.py</code></td><td>Training-side embedding: the same <code>prepare()</code> as serving, sent to the encoder server or to in-process vLLM.</td></tr>
+          <tr><td><code>train/finetune.py</code></td><td>Research trainer: agent traces (<code>--task clm</code>), and typed questions through the shared loop. Stamps the encoder into every checkpoint.</td></tr>
           <tr><td><code>evaluation/bon_eval.py</code></td><td>Best-of-N trajectory selection with a trained head.</td></tr>
         </tbody>
       </table>

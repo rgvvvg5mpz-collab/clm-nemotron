@@ -207,19 +207,38 @@ fine-tuning, CLM reaches SOTA on both (**81.6%** and **87.6%**) while running
 
 ## Fine-tuning CLM on Your Own Data
 
-See [docs/FINETUNING.md](docs/FINETUNING.md).
+### Train a classifier: `clm-train`
 
-Heads train from scratch on text with Nemotron (the default `--encoder`). There is no
-Nemotron warm start yet, and upstream embedding datasets were built with a different encoder,
-so they are refused. `--embed-url` points at the encoder from the quickstart; leave it out to
-embed with in-process vLLM instead.
+`clm-train` turns labelled examples into a head for `clm-serve`. The encoder stays frozen;
+only the two projection heads are trained. With the encoder from the quickstart running:
 
 ```bash
-# typed decisions
-python train/finetune.py --task choice --data LocalLLaMA/typed-decisions --workflow all \
-    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
-    --out-dir runs/typed
+# text + label rows (CSV / JSONL / JSON / parquet), one question for every row
+clm-train --data tickets.csv --question "Which team should handle this?" \
+    --options '{"billing": "A charge, invoice, refund or payment problem.",
+                "technical": "The product is broken, erroring or down."}' \
+    --group-column customer --out runs/tickets
 
+# typed rows: several questions per state (file, directory or Hub dataset)
+clm-train --data LocalLLaMA/typed-decisions --workflow all --out runs/typed
+
+clm-serve --ckpt runs/tickets/best_head.pt
+```
+
+It holds out a test split (from `--test`, a `split` column, or `--test-frac`, by
+`--group-column` when given). It embeds each text once into a cache, keeps the epoch with
+the best validation accuracy, and prints the head's test accuracy next to `clm-raw` and the
+majority label. On a Mac with the 1B encoder, 300 labelled customer conversations trained in
+16 s and reached 95% test accuracy, against 56% for `clm-raw` and 18% for the majority label.
+Data formats, every option and the errors are in [docs/TRAINING.md](docs/TRAINING.md).
+
+Heads train from scratch on Nemotron (the default `--encoder`). There is no Nemotron warm
+start yet, and upstream embedding datasets were built with a different encoder, so they are
+refused.
+
+### Agent trajectories: `train/finetune.py --task clm`
+
+```bash
 # agentic step traces (state / action / task_id / step_idx / reward per line), e.g. your own DeepSWE runs
 python train/finetune.py --task clm --data traces.jsonl \
     --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
@@ -408,6 +427,10 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── embedder.py              #   /v1/embeddings client + LRU cache of normalised embeddings
 │   ├── cache.py                 #   the reserved vector arena behind --action-cache
 │   ├── server.py                #   FastAPI app, `clm-serve`
+│   ├── train_cli.py             #   `clm-train`: train a head from labelled rows
+│   ├── trainer.py               #   the head-training loop (clm-train, finetune.py --task choice)
+│   ├── typed_data.py            #   read CSV/JSONL/parquet rows, text+label -> typed, group splits
+│   ├── embed_backends.py        #   training-side embedding (encoder server or in-process vLLM)
 │   └── static/                  #   the playground: index.html + app.css + app.js, no build step
 ├── tools/playground_mock.py     # serve the playground without a GPU (fake encoder)
 ├── tools/local_embed_server.py  # /v1/embeddings on Apple silicon / CPU (sentence-transformers)
@@ -422,7 +445,9 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── common.py                #   one client for both endpoints: retries, latency, cache
 │   └── t_rex/                   #   Chrome dinosaur game in real time (run.py --model clm|jev)
 ├── tests/                       # pytest tests/  (no GPU needed)
-└── docs/FINETUNING.md           # the fine-tuning guide
+├── docs/TRAINING.md             # clm-train: data formats, options, outputs, errors
+├── docs/site/                   # architecture, classification guide and training pages (HTML)
+└── docs/FINETUNING.md           # upstream's instructions for an agent-run fine-tuning loop
 ```
 
 This branch carries the inference package, the playground, the fine-tuning script,

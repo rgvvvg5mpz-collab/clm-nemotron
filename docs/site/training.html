@@ -1,0 +1,336 @@
+<title>Training CLM Heads</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a runbook in one reading column (~70ch); commands, data samples and reference tables break out to full width. Same tokens as the architecture page and the guide: state = amber, action = blue, trained = teal. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --fg: #18202c;
+  --muted: #566173;
+  --line: #d6dce5;
+  --state: #a85f00;
+  --action: #1f55b5;
+  --trained: #0b6e66;
+  --code-bg: #eef1f6;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+    --state: #f0a845; --action: #82abff; --trained: #43c4b6; --code-bg: #1a222d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+  --state: #f0a845; --action: #82abff; --trained: #43c4b6; --code-bg: #1a222d;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+.page { max-width: 1040px; margin: 0 auto; display: grid; gap: 52px; }
+.prose { max-width: 70ch; display: grid; gap: 14px; min-width: 0; }
+header.top { display: grid; gap: 12px; max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2rem, 4.5vw, 2.9rem); line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 500; font-size: 1.15rem; margin: 0; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 1.25rem; display: grid; gap: 6px; }
+.lede { font-size: 1.1rem; color: var(--muted); }
+a { color: var(--action); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: .88em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55; }
+.dim { color: var(--muted); }
+.trained { color: var(--trained); }
+section { display: grid; gap: 18px; }
+section.step { grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 18px; }
+.step-no { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; color: var(--muted); font-variant-numeric: tabular-nums; }
+.step-body { display: grid; gap: 16px; min-width: 0; }
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cols > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.label { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td:first-child code { white-space: nowrap; }
+tr.best td { font-weight: 600; }
+.quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.quick > div { padding: 16px 18px; display: grid; gap: 8px; align-content: start; border-right: 1px solid var(--line); min-width: 0; }
+.quick > div:last-child { border-right: 0; }
+.quick b { font-family: var(--display); font-weight: 600; font-size: 1.05rem; }
+.quick pre { font-size: 12.5px; padding: 10px 12px; }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); max-width: 70ch; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .95rem; }
+footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 760px) {
+  .quick { grid-template-columns: 1fr; }
+  .quick > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .quick > div:last-child { border-bottom: 0; }
+  .cols { grid-template-columns: 1fr; }
+  section.step { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow">CLM on Nemotron · clm-train</div>
+    <h1>Train a classifier head on your own labels</h1>
+    <p class="lede"><code>clm-train</code> turns a file of labelled examples into a head that <code>clm-serve</code> can serve. The Nemotron encoder stays frozen: every text is embedded once, then only the two small <span class="trained">projection heads</span> are trained. On a laptop, 400 labelled tickets take about 16 seconds.</p>
+    <nav class="nav" aria-label="Pages"><a href="#data">Data formats</a><a href="#output">Reading the output</a><a href="#flags">All options</a><a href="#trouble">Errors</a><a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w">Classification guide</a><a href="https://claude.ai/artifact/4BPQENTTyiVFYRNsDamdgL">Architecture</a></nav>
+  </header>
+
+  <div class="quick" aria-label="The three commands">
+    <div><span class="label">1 · start the encoder</span><b>Leave it running</b>
+<pre># Mac
+python tools/local_embed_server.py \
+  --encoder nemotron-3-embed-1b
+# Linux + NVIDIA GPU
+./serve_nemotron3_embed_8b.sh</pre></div>
+    <div><span class="label">2 · train</span><b>Labels in, head out</b>
+<pre>clm-train --data tickets.csv \
+  --question "Which team?" \
+  --options options.json \
+  --encoder nemotron-3-embed-1b \
+  --out runs/tickets</pre></div>
+    <div><span class="label">3 · serve</span><b>Same encoder</b>
+<pre>clm-serve \
+  --encoder nemotron-3-embed-1b \
+  --ckpt runs/tickets/best_head.pt</pre></div>
+  </div>
+
+  <section class="step" id="setup">
+    <div class="step-no">1</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Install, start the encoder, and pick its size</h2>
+        <p>Install the package from the repo: <code>pip install -e .</code> on Linux, <code>pip install -e ".[mac]"</code> on a Mac. That puts <code>clm-train</code> and <code>clm-serve</code> on the path. Training talks to the encoder over HTTP at <code>http://127.0.0.1:8090/v1/embeddings</code>; change it with <code>--embed-url</code>, or pass <code>--offline</code> on a Linux GPU box to embed in-process with vLLM.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th><code>--encoder</code></th><th>Use it when</th><th>Start it with</th></tr></thead>
+          <tbody>
+            <tr><td><code>nemotron-3-embed-1b</code></td><td>Laptops and quick iteration (2.3 GB, 2048-d)</td><td><code>python tools/local_embed_server.py --encoder nemotron-3-embed-1b</code></td></tr>
+            <tr><td><code>nemotron-3-embed-8b</code></td><td>Production on an NVIDIA GPU (15.9 GB, 4096-d); the default</td><td><code>./serve_nemotron3_embed_8b.sh</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">The head belongs to the encoder it was trained on. Train with the encoder you'll serve with: <code>clm-serve</code> refuses a head from the other size.</p>
+    </div>
+  </section>
+
+  <section class="step" id="data">
+    <div class="step-no">2</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Prepare the data</h2>
+        <p>Use the simple format when every example answers the same question. Use typed rows when one state carries several questions, or each row has its own options.</p>
+      </div>
+      <div class="cols">
+        <div>
+          <span class="label">Simple · one question, CSV / JSONL / JSON / parquet</span>
+<pre>text,label,customer
+"customer: I was charged twice…",billing,c-1042
+"customer: The app crashes on login",technical,c-0007
+"customer: Parcel never arrived",delivery,c-0311</pre>
+<pre>// options.json: what each label means
+{"billing":   "A charge, invoice, subscription or payment problem.",
+ "technical": "The product or service is not working as expected.",
+ "delivery":  "Shipping, fulfilment or delivery of a physical item."}</pre>
+        </div>
+        <div>
+          <span class="label">Typed rows · many questions per state, JSONL / parquet / directory / Hub</span>
+<pre>{"id": "t-17", "split": "train",
+ "state": {"thread": [{"role": "customer", "text": "…"}]},
+ "questions": {
+   "category": {"type": "choice", "instructions": "What is this about?",
+                "criteria": {"billing": "…", "delivery": "…"}},
+   "urgency":  {"type": "score", "instructions": "How urgent?",
+                "criteria": ["None: …", "Routine: …", "Critical: …"]}},
+ "gold": {
+   "category": {"label": "delivery"},
+   "urgency":  {"label": "2", "probabilities": {"2": 0.6, "1": 0.4}}}}</pre>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question type</th><th>Simple format flags</th><th>Accepted labels</th></tr></thead>
+          <tbody>
+            <tr><td><code>choice</code></td><td><code>--options '{"key": "description", …}'</code></td><td>An option key</td></tr>
+            <tr><td><code>score</code></td><td><code>--type score --options '["level 0", "level 1", …]'</code></td><td>A level index (<code>0</code>, <code>1</code>, …) or the exact level text</td></tr>
+            <tr><td><code>noul</code></td><td><code>--type noul</code>, optional <code>--options '{"true": "…", "false": "…"}'</code></td><td><code>true</code>/<code>false</code>, <code>yes</code>/<code>no</code> or <code>1</code>/<code>0</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <h3>Where the test split comes from</h3>
+        <ol>
+          <li><code>--test FILE</code>, a separate file in the same format, wins.</li>
+          <li>A <code>split</code> column with values <code>train</code> / <code>test</code>.</li>
+          <li>A directory or Hub dataset laid out as <code>&lt;workflow&gt;/train-*.parquet</code> and <code>test-*.parquet</code>.</li>
+          <li>Otherwise <code>--test-frac</code> (default 0.2) of the rows is held out.</li>
+        </ol>
+        <p>Pass <code>--group-column</code> (customer, account, incident) so all rows of one group land on the same side of both the test and the validation split. Without it, near-duplicates of one customer can sit on both sides and inflate the score. Option descriptions are what the model matches against, so write them as the <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w#options">guide</a> describes: distinct, evidence-based, no catch-alls.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="run">
+    <div class="step-no">3</div>
+    <div class="step-body">
+      <div class="prose"><h2>Run it</h2></div>
+<pre><span class="dim"># one choice question, separate test file</span>
+clm-train --data tickets_train.csv --test tickets_test.csv \
+  --question "What is this customer conversation primarily about?" --options options.json \
+  --encoder nemotron-3-embed-1b --out runs/tickets
+
+<span class="dim"># yes/no, held out by customer</span>
+clm-train --data escalations.jsonl --type noul --question "A human agent must take over this conversation." \
+  --group-column customer --encoder nemotron-3-embed-1b --out runs/escalation
+
+<span class="dim"># typed rows with many questions per state: a local file, a directory, or a Hub dataset</span>
+clm-train --data LocalLLaMA/typed-decisions --workflow all --encoder nemotron-3-embed-1b --out runs/typed</pre>
+      <div class="prose">
+        <h3>What happens</h3>
+        <ol>
+          <li>Rows are split into train, validation (<code>--val-frac</code> of train, by group) and test.</li>
+          <li>Every state and option text is embedded once, with the same <code>query:</code> / <code>passage:</code> prompts and truncation <code>clm-serve</code> uses. Vectors are cached in <code>OUT/embeddings/</code>, so a re-run with new hyperparameters embeds nothing.</li>
+          <li>The <span class="trained">state head, action head and logit scale</span> train for up to <code>--epochs</code>. The epoch with the best validation accuracy is kept, and training stops after <code>--patience</code> epochs without improvement.</li>
+          <li>The kept head is scored once on the test split, next to <code>clm-raw</code> and the majority label.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="output">
+    <div class="step-no">4</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Read the output</h2>
+        <p>The end of a real run on an Apple M5 Pro: 300 labelled customer conversations, 100 for testing, five categories, Nemotron-3-Embed-1B.</p>
+      </div>
+<pre>[choice] baselines: majority test 0.1800 | clm-raw (nemotron-3-embed-1b, no head) val 0.4333 test 0.5600
+[choice] epoch 11 loss 1.2846 val acc 0.9000 soft_ce 0.2739
+…
+[choice] early stop at epoch 16
+[choice] best epoch 11: val acc 0.9000 | TEST acc 0.9500 (clm-raw 0.5600, init 0.1700, majority 0.1800)
+
+  test accuracy   head 95.0%   clm-raw 56.0%   majority 18.0%   (0.25 min)
+  serve it:  clm-serve --encoder nemotron-3-embed-1b --ckpt runs/example/head/best_head.pt
+  ask it:    POST /v1/systemone with "questions": the contents of runs/example/head/questions.json</pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Run</th><th class="n">Train rows</th><th class="n">Majority</th><th class="n">clm-raw</th><th class="n">Head</th><th class="n">Time</th></tr></thead>
+          <tbody>
+            <tr><td>Customer-service category (1 question, 5 options)</td><td class="n">300</td><td class="n">18.0%</td><td class="n">56.0%</td><td class="n">95.0%</td><td class="n">16 s</td></tr>
+            <tr><td>All four typed-decisions workflows (15 questions)</td><td class="n">1,200</td><td class="n">45.0%</td><td class="n">37.8%</td><td class="n">69.2%</td><td class="n">4.2 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File in <code>--out</code></th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><code>best_head.pt</code></td><td>The head to serve: weights, logit scale, and the encoder it belongs to</td></tr>
+            <tr><td><code>final_head.pt</code></td><td>The last epoch, for comparison only</td></tr>
+            <tr><td><code>questions.json</code></td><td>Simple format only: the exact question to send at serving time</td></tr>
+            <tr><td><code>summary.json</code></td><td>Test accuracy per question for the head, <code>clm-raw</code> and majority</td></tr>
+            <tr><td><code>history.json</code></td><td>Validation accuracy and soft cross-entropy for every epoch</td></tr>
+            <tr><td><code>embeddings/</code></td><td>The cached vectors; delete them if you change the encoder server's model</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">If the head doesn't beat the majority label, <code>clm-train</code> says so. Don't serve it; work through the guide's <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w#fix">What to change when</a> table first. The test score comes from a single split: with 100 test rows, ±5 points is noise.</p>
+    </div>
+  </section>
+
+  <section class="step" id="serve">
+    <div class="step-no">5</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Serve it and ask the same question</h2>
+        <p>The head scores whatever question you send. Send the one it was trained on, from <code>questions.json</code>, with the same option texts.</p>
+      </div>
+<pre>clm-serve --encoder nemotron-3-embed-1b --ckpt runs/tickets/best_head.pt
+
+import json
+from clm import CLMClient
+questions = json.load(open("runs/tickets/questions.json"))
+r = CLMClient().system_one(state="customer: I was billed twice for my subscription this month.",
+                           questions=questions)
+r.answers["label"].choice          <span class="dim"># 'billing'</span>
+r.answers["label"].probabilities   <span class="dim"># near 1.0: calibrate before using as a confidence</span></pre>
+      <p class="note">Trained heads are confident: on the two tickets we tried, the top class came out at 0.999 or more. Before a probability gates anything, fit a temperature and thresholds on held-out data, as the <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w#calibrate">guide's calibration step</a> describes. A changed <code>best_head.pt</code> is reloaded by a running <code>clm-serve</code> on the next request.</p>
+    </div>
+  </section>
+
+  <section id="flags">
+    <div class="prose"><h2>All options</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Option</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>--data</code></td><td>required</td><td>File (.csv .jsonl .json .parquet), typed-dataset directory, or Hub dataset id</td></tr>
+          <tr><td><code>--test</code></td><td></td><td>A separate test file</td></tr>
+          <tr><td><code>--test-frac</code></td><td>0.2</td><td>Held-out share when the data has no split</td></tr>
+          <tr><td><code>--group-column</code></td><td></td><td>Keeps each group on one side of the test and validation splits</td></tr>
+          <tr><td><code>--workflow</code></td><td><code>all</code></td><td>Subfolder of a typed dataset</td></tr>
+          <tr><td><code>--question</code></td><td></td><td>Switches to the simple format: the question every row answers</td></tr>
+          <tr><td><code>--type</code></td><td><code>choice</code></td><td><code>choice</code>, <code>score</code> or <code>noul</code></td></tr>
+          <tr><td><code>--options</code></td><td></td><td>JSON or a path to a JSON file: <code>{key: description}</code>, a level list, or <code>{true, false}</code></td></tr>
+          <tr><td><code>--text-column</code>, <code>--label-column</code>, <code>--id-column</code></td><td><code>text</code>, <code>label</code></td><td>Column names in the simple format</td></tr>
+          <tr><td><code>--qid</code></td><td><code>label</code></td><td>The question's name in requests and answers</td></tr>
+          <tr><td><code>--encoder</code></td><td><code>nemotron-3-embed-8b</code></td><td>Frozen encoder; <code>CLM_ENCODER</code> overrides the default</td></tr>
+          <tr><td><code>--embed-url</code></td><td><code>:8090/v1/embeddings</code></td><td>The running encoder; <code>CLM_EMB_URL</code> overrides</td></tr>
+          <tr><td><code>--served-model-name</code></td><td>encoder name</td><td>Model name the encoder server answers to</td></tr>
+          <tr><td><code>--offline</code></td><td>off</td><td>Embed with in-process vLLM (Linux + NVIDIA GPU) instead of HTTP</td></tr>
+          <tr><td><code>--max-len</code></td><td>2048</td><td>Token budget per text, prompt included; states keep their end</td></tr>
+          <tr><td><code>--embed-cache</code></td><td><code>OUT/embeddings</code></td><td>Share one cache between runs on the same data</td></tr>
+          <tr><td><code>--epochs</code>, <code>--patience</code></td><td>20, 5</td><td>Training length and early stopping</td></tr>
+          <tr><td><code>--batch</code>, <code>--lr</code></td><td>256, 5e-4</td><td>Optimiser settings</td></tr>
+          <tr><td><code>--width</code>, <code>--depth</code></td><td>1536, 3</td><td>Head size; try 512, 2 for a few hundred examples</td></tr>
+          <tr><td><code>--targets</code></td><td><code>soft</code></td><td>Train on <code>gold.probabilities</code> when present, otherwise the label</td></tr>
+          <tr><td><code>--loss</code></td><td><code>infonce</code></td><td><code>infonce</code> contrasts against every option text in the batch; <code>softce</code> only against a question's own options</td></tr>
+          <tr><td><code>--val-frac</code></td><td>0.1</td><td>Share of training rows or groups used to pick the best epoch</td></tr>
+          <tr><td><code>--init-ckpt</code></td><td></td><td>Continue from a head trained on the same encoder</td></tr>
+          <tr><td><code>--seed</code></td><td>1234</td><td>Fixes the splits and the initialisation</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <div class="prose"><h2>Errors and what they mean</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Message contains</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td><code>embedder unreachable at …</code></td><td>Start the encoder (step 1), or point <code>--embed-url</code> at it</td></tr>
+          <tr><td><code>model 'nemotron-3-embed-8b' not served</code></td><td>The encoder server runs another size. Match <code>--encoder</code> to it.</td></tr>
+          <tr><td><code>returned 2048-d vectors</code> (expected 4096-d)</td><td>Same cause: the server's model and <code>--encoder</code> differ</td></tr>
+          <tr><td><code>is not one of the options</code></td><td>A label isn't a key in <code>--options</code>. Fix the label or add the option.</td></tr>
+          <tr><td><code>has no 'split' column</code></td><td>A typed file with no split. Add a <code>split</code> column, or pass <code>--test</code> / <code>--test-frac</code>.</td></tr>
+          <tr><td><code>rows are missing ['gold', 'questions', 'state']</code></td><td>Simple data without <code>--question</code>. Add <code>--question</code> and <code>--options</code>.</td></tr>
+          <tr><td><code>need labelled questions in train, validation and test</code></td><td>Too few rows, or one split is empty. Add data or lower <code>--val-frac</code> / <code>--test-frac</code>.</td></tr>
+          <tr><td><code>belongs to encoder …</code> / <code>records no encoder</code></td><td><code>--init-ckpt</code> or <code>clm-serve</code> got a head from a different encoder. Train with the matching <code>--encoder</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">For agent trajectories (state → action pairs, best-of-N verification) use <code>python train/finetune.py --task clm --data traces.jsonl</code> and <code>evaluation/bon_eval.py</code>; see the README's fine-tuning section.</p>
+  </section>
+
+  <footer>Covers <code>clm-train</code> on branch <code>encoder-agnostic</code> of the CLM fork in <code>CLM-Piyush</code>. Numbers are from single runs on an Apple M5 Pro with Nemotron-3-Embed-1B.</footer>
+</div>

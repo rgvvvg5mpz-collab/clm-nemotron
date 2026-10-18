@@ -94,7 +94,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
     <div class="eyebrow">CLM on Nemotron · practitioner guide</div>
     <h1>Solving a classification problem with CLM</h1>
     <p class="lede">You don't prompt CLM the way you prompt a chat model, and you don't fine-tune the model itself. You write a state, a question and option texts, and if zero-shot isn't good enough, you train two small heads on labelled examples. This page covers when to do which.</p>
-    <nav class="nav" aria-label="Pages"><a href="#results">Results from a real run</a><a href="#fix">What to change when</a><a href="https://claude.ai/artifact/4BPQENTTyiVFYRNsDamdgL">Architecture →</a></nav>
+    <nav class="nav" aria-label="Pages"><a href="#results">Results from a real run</a><a href="https://claude.ai/artifact/JjFHh3mKhCvx8XgciVy47F">Training with clm-train →</a><a href="#fix">What to change when</a><a href="https://claude.ai/artifact/4BPQENTTyiVFYRNsDamdgL">Architecture →</a></nav>
   </header>
 
   <div class="path" aria-label="Three levels of effort">
@@ -227,19 +227,23 @@ gold:      {"category": {"label": "delivery", "probabilities": {"delivery": 0.95
         <h2>Fine-tune the heads, not the model</h2>
         <p>Training embeds every state and option once with the frozen encoder, using the same prompts and truncation as serving, then trains only the <span class="trained">state and action heads</span>. On a laptop with the 1B encoder, embedding is the slow part and training takes minutes.</p>
       </div>
-<pre>python train/finetune.py --task choice --encoder nemotron-3-embed-1b \
-    --data LocalLLaMA/typed-decisions --workflow all \
-    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-1b \
-    --out-dir runs/typed-1b</pre>
+<pre><span class="dim"># text + label rows, one question</span>
+clm-train --data tickets.csv --question "Which team should handle this?" --options options.json \
+    --group-column customer --encoder nemotron-3-embed-1b --out runs/tickets
+
+<span class="dim"># typed rows, many questions per state (this page's results)</span>
+clm-train --data LocalLLaMA/typed-decisions --workflow all --encoder nemotron-3-embed-1b --out runs/typed-1b</pre>
+      <p>Data formats, splits, outputs and every option are on the <a href="https://claude.ai/artifact/JjFHh3mKhCvx8XgciVy47F">training page</a>.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Knob</th><th>Default</th><th>Change it when</th></tr></thead>
+          <thead><tr><th>clm-train option</th><th>Default</th><th>Change it when</th></tr></thead>
           <tbody>
             <tr><td><code>--targets soft|hard</code></td><td><code>soft</code></td><td>Use <code>hard</code> only if you have single labels and no annotator distribution.</td></tr>
             <tr><td><code>--loss infonce|softce</code></td><td><code>infonce</code></td><td><code>infonce</code> contrasts against every option text in the batch, which helps when option sets differ between questions. <code>softce</code> only compares a question's own options; try it when one fixed option set dominates.</td></tr>
             <tr><td><code>--width</code>, <code>--depth</code></td><td>1536, 3</td><td>Smaller (512, 2) for a few hundred examples if validation accuracy peaks early and falls.</td></tr>
             <tr><td><code>--epochs</code>, <code>--patience</code></td><td>20, 5</td><td>The best epoch by validation accuracy is kept as <code>best_head.pt</code>; raise patience for noisy labels.</td></tr>
             <tr><td><code>--encoder</code></td><td><code>nemotron-3-embed-8b</code></td><td>Must match the encoder you'll serve with. Heads don't transfer between the 1B and the 8B.</td></tr>
+            <tr><td><code>--group-column</code></td><td></td><td>Always, when rows share a customer, account or incident</td></tr>
           </tbody>
         </table>
       </div>

@@ -45,6 +45,7 @@ all = ["contrastive-lm[hf]"]
 
 [project.scripts]
 clm-serve = "clm.server:main"
+clm-train = "clm.train_cli:main"
 clm-download = "clm.heads:download_main"
 
 [project.urls]

@@ -293,7 +293,8 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
     rows = []
     for i in range(24):
         team = "billing" if i % 2 else "technical"
-        rows.append({"id": f"r{i}", "state": f"Ticket {i}: {'refund please' if i % 2 else 'app crashes'}",
+        rows.append({"id": f"r{i}", "split": "test" if i >= 16 else "train",
+                     "state": f"Ticket {i}: {'refund please' if i % 2 else 'app crashes'}",
                      "questions": json.dumps({"dept": {"type": "choice", "instructions": "Which team?",
                                                        "criteria": {"billing": "Charges and refunds",
                                                                     "technical": "Bugs and outages"}}}),
@@ -324,6 +325,14 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
     ck = torch.load(out / "best_head.pt", map_location="cpu", weights_only=False)
     assert ck["cfg"]["encoder"] == NEMO.identity()
     HeadPair("trained", str(out / "best_head.pt"), "cpu", NEMO).ensure()   # servable as-is
+
+    # a file without a split column must not double as its own test set
+    nosplit = tmp_path / "nosplit.parquet"
+    pq.write_table(pa.Table.from_pylist([{k: v for k, v in r.items() if k != "split"} for r in rows]), nosplit)
+    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "choice",
+                        "--data", str(nosplit), "--embed-cache", str(cache_dir), "--out-dir", str(tmp_path / "x")],
+                       capture_output=True, text=True)
+    assert p.returncode != 0 and "no 'split' column" in p.stderr
 
 
 # ----------------------------------------------------------------------------- tools/local_embed_server.py
@@ -367,3 +376,58 @@ def test_local_embed_server_speaks_the_vllm_subset():
     e.session = c
     vec, tokens = e.embed(["hello"], "state")
     assert vec.shape == (1, 8) and tokens > 0
+
+
+# ----------------------------------------------------------------------------- clm-train
+def _prefill_cache(rows, cache_dir, name="nemotron-3-embed-8b", max_len=2048):
+    """Write the embedding cache clm-train would build, so no encoder is needed."""
+    import hashlib
+    from clm.typed_data import typed_decision_examples
+    keys = set()
+    for e in typed_decision_examples(rows):
+        keys.add("state\x00" + e.state_text)
+        keys.update("action\x00" + t for t in e.candidates)
+    keys = sorted(keys)
+    os.makedirs(cache_dir, exist_ok=True)
+    np.savez(os.path.join(cache_dir, f"choice_{name}_{max_len}.npz"),
+             keys=np.array([hashlib.sha1(k.encode()).hexdigest() for k in keys]),
+             vecs=np.random.default_rng(0).standard_normal((len(keys), 4096)).astype(np.float16))
+
+
+def test_clm_train_on_a_text_label_csv(tmp_path):
+    import csv
+    import json
+    from clm.train_cli import main as clm_train
+    from clm.typed_data import read_rows, simple_rows
+
+    data = tmp_path / "tickets.csv"
+    with open(data, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["text", "label", "customer"])
+        for i in range(40):
+            w.writerow([f"Ticket {i}: {'I was charged twice' if i % 2 else 'the app crashes'}",
+                        "billing" if i % 2 else "technical", f"c{i // 2}"])
+    options = {"billing": "A charge, invoice, refund or payment problem.",
+               "technical": "The product is broken, erroring or down."}
+    question = {"type": "choice", "instructions": "Which team should handle this?", "criteria": options}
+    _prefill_cache(simple_rows(read_rows(str(data)), question), tmp_path / "cache")
+
+    out = tmp_path / "run"
+    clm_train(["--data", str(data), "--question", "Which team should handle this?",
+               "--options", json.dumps(options), "--group-column", "customer", "--test-frac", "0.25",
+               "--embed-cache", str(tmp_path / "cache"), "--encoder", "nemotron-3-embed-8b",
+               "--out", str(out), "--epochs", "2", "--width", "32", "--depth", "2", "--batch", "8"])
+    summary = json.load(open(out / "summary.json"))
+    assert summary["encoder"] == "nemotron-3-embed-8b" and 0 <= summary["test"]["acc"] <= 1
+    assert json.load(open(out / "questions.json")) == {"label": question}
+    HeadPair("t", str(out / "best_head.pt"), "cpu", NEMO).ensure()
+
+    # held out by customer: no customer appears in both splits
+    from clm.typed_data import holdout
+    rows = simple_rows(read_rows(str(data)), question, group_column="customer")
+    tr, te = holdout(rows, 0.25, 1234, lambda r: r["group"])
+    assert not {r["group"] for r in tr} & {r["group"] for r in te} and len(te) == 10
+
+    # labels outside the options are refused before anything is embedded
+    with pytest.raises(ValueError, match="not one of the options"):
+        simple_rows([{"text": "x", "label": "sales"}], question)
