@@ -30,7 +30,7 @@ question: Choose the best safe action for the dinosaur.
   run:  Unsafe. Hits the 2 large cacti. Collision.
 ```
 
-CLM run on 2026-09-23 with `clm-latest` = `CLM_v0.1-8B.pt` (Qwen3-8B encoder on one RTX 4090);
+CLM run upstream on 2026-09-23 with its released head (a different encoder, on one RTX 4090), not a Nemotron head;
 Jev run on 2026-09-22 with `jev-latest` (answered as `jev-1.13.0`). Latencies are client-side per
 request.
 

@@ -5,15 +5,16 @@ An embedding dir (as written by the DeepSWE precompute in the research repo)::
 
     state_embeddings.pt    [N, H] tensor
     action_embeddings.pt   [N, H] tensor
-    metadata.json          {"num_samples": N, "hidden_size": H,
+    metadata.json          {"num_samples": N, "hidden_size": H, "encoder": {...},
                             "samples": [{"trajectory_id", "step_idx", "task_id",
                                          "reward", "model", "config"}, ...]}
 
 Parquet rows are samples in order: the metadata columns plus ``state_embedding`` /
-``action_embedding`` fixed-size lists.
+``action_embedding`` fixed-size lists.  The encoder identity (``clm.encoders``)
+travels as ``clm_encoder.json`` next to ``data/``; a dataset without it is an
+upstream release from a different encoder, and training / evaluation refuse it.
 
-    python preprocessing/hf_embeddings.py download Contrastive-LM/deepswe-clm-train-embeddings-8k \\
-        --out data/deepswe_train
+    python preprocessing/hf_embeddings.py download <user>/<dataset> --out data/train
     python preprocessing/hf_embeddings.py export embeddings/train_pool/merged \\
         --out hf/deepswe_train --shards 16 --push <user>/<dataset>
 """
@@ -30,10 +31,7 @@ import numpy as np
 META_KEYS = ("trajectory_id", "step_idx", "task_id", "reward", "model", "config")
 EMB_COLS = ("state_embedding", "action_embedding")
 EMB_FILES = ("state_embeddings.pt", "action_embeddings.pt")
-DEEPSWE_TRAIN_DATASET = "Contrastive-LM/deepswe-clm-train-embeddings-8k"
-DEEPSWE_EVAL_DATASET = "Contrastive-LM/deepswe-clm-embeddings-8k"
-TRAIN_DATASETS = {"deepswe": DEEPSWE_TRAIN_DATASET}
-TRAIN_SPLITS = {"deepswe": None}
+ENCODER_FILE = "clm_encoder.json"
 
 
 def is_embedding_dir(path: str) -> bool:
@@ -51,7 +49,7 @@ def _source_root(source: str, cache_dir: str | None) -> str:
         source, repo_type="dataset", cache_dir=cache_dir,
         allow_patterns=["*.parquet", "**/*.parquet", "state_embeddings.pt",
                         "action_embeddings.pt", "metadata.json", "*/state_embeddings.pt",
-                        "*/action_embeddings.pt", "*/metadata.json"])
+                        "*/action_embeddings.pt", "*/metadata.json", ENCODER_FILE])
 
 
 def _native_embedding_dir(root: str, split: str | None) -> str | None:
@@ -127,8 +125,11 @@ def download(source: str, out_dir: str, cache_dir: str | None = None, dtype: str
     torch.save(torch.from_numpy(state), os.path.join(out_dir, "state_embeddings.pt"))
     torch.save(torch.from_numpy(action), os.path.join(out_dir, "action_embeddings.pt"))
     tmp = os.path.join(out_dir, "metadata.json.tmp")
+    meta = {"num_samples": n, "hidden_size": dim, "source": source, "samples": samples}
+    if os.path.exists(os.path.join(root, ENCODER_FILE)):
+        meta["encoder"] = json.load(open(os.path.join(root, ENCODER_FILE)))
     with open(tmp, "w") as fo:
-        json.dump({"num_samples": n, "hidden_size": dim, "source": source, "samples": samples}, fo)
+        json.dump(meta, fo)
     os.replace(tmp, os.path.join(out_dir, "metadata.json"))
     print(f"[hf-emb] wrote {out_dir}: {n} x {dim} ({dtype})", flush=True)
     return out_dir
@@ -140,7 +141,8 @@ def export(emb_dir: str, out_dir: str, shards: int = 8, dtype: str = "float16") 
     import pyarrow.parquet as pq
     import torch
 
-    samples = json.load(open(os.path.join(emb_dir, "metadata.json")))["samples"]
+    meta = json.load(open(os.path.join(emb_dir, "metadata.json")))
+    samples = meta["samples"]
     se = torch.load(os.path.join(emb_dir, "state_embeddings.pt"), map_location="cpu", mmap=True)
     ae = torch.load(os.path.join(emb_dir, "action_embeddings.pt"), map_location="cpu", mmap=True)
     n, dim = se.shape
@@ -151,6 +153,8 @@ def export(emb_dir: str, out_dir: str, shards: int = 8, dtype: str = "float16") 
     nsh = math.ceil(n / per)
     data_dir = os.path.join(out_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
+    if meta.get("encoder"):
+        json.dump(meta["encoder"], open(os.path.join(out_dir, ENCODER_FILE), "w"), indent=1)
     written = []
     for i in range(nsh):
         a, b = i * per, min(n, (i + 1) * per)
@@ -178,8 +182,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("download", help="parquet dataset -> embedding dir")
-    d.add_argument("source", nargs="?", default=DEEPSWE_TRAIN_DATASET,
-                   help=f"HF dataset id, local dir, or parquet file (default: {DEEPSWE_TRAIN_DATASET})")
+    d.add_argument("source", help="HF dataset id, local dir, or parquet file")
     d.add_argument("--out", required=True)
     d.add_argument("--dtype", choices=["float16", "float32"], default="float16")
     d.add_argument("--cache-dir", default=None)

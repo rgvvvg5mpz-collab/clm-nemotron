@@ -10,7 +10,7 @@ Engine (in-process, needs ``pip install -r requirements.txt`` from the repo and 
     from clm import Engine
     Engine().answer(state, {"ok": {"type": "noul", "instructions": "Is this fine?"}})
 
-Server: ``clm-serve``.  Checkpoint: ``clm-download``.
+Server: ``clm-serve``.  Fetch a head from the Hub: ``clm-download --repo ... --file ...``.
 """
 from .client import (Answer, Choice, ChoiceAnswer, CLMClient, CLMError, Noul, NoulAnswer, Question, Score,
                      ScoreAnswer, SystemOneResponse, Usage)

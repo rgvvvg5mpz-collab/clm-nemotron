@@ -3,12 +3,13 @@
 A CLM checkpoint (as trained by ``train/finetune.py``) is a ``torch.save``
 dict with ``state_head`` / ``action_head`` state dicts, ``logit_scale`` (log of
 the InfoNCE temperature inverse) and ``cfg`` (``width``, ``depth``, optional
-``projection_dim``, ``activation``, ``layernorm``, ``residual``).  Each head maps
-a 4096-d encoder embedding to a ``projection_dim``-d vector; the score of a
+``projection_dim``, ``activation``, ``layernorm``, ``residual``, ``hidden_size``
+and ``encoder``, the ``clm.encoders`` identity it was trained on).  Each head maps
+an encoder embedding to a ``projection_dim``-d vector; the score of a
 (state, candidate) pair is ``exp(logit_scale) * cos(state_head(s), action_head(c))``.
 
-The reference head lives at https://huggingface.co/Contrastive-LM/CLM-v0.1-8B
-(``CLM_v0.1-8B.pt``, trained against Qwen3-8B last-token pooling).
+There is no default head: serve one trained on the configured encoder, or fetch
+your own from the Hub with ``clm-download --repo ... --file ...``.
 """
 from __future__ import annotations
 
@@ -18,10 +19,10 @@ from typing import Any
 
 import numpy as np
 
-HIDDEN = 4096          # Qwen3-8B hidden size (encoder embedding width)
+from .encoders import EncoderSpec, check_compatible, checkpoint_encoder
+
+HIDDEN = 4096          # default encoder embedding width (Nemotron-3-Embed-8B)
 PROJ_DIM = 512
-HF_REPO = "Contrastive-LM/CLM-v0.1-8B"
-HF_FILE = "CLM_v0.1-8B.pt"
 DEFAULT_CKPT_DIR = os.environ.get("CLM_CKPT_DIR", os.path.join(os.path.expanduser("~"), ".cache", "clm"))
 
 
@@ -66,10 +67,13 @@ def make_head(width: int, depth: int = 2, proj: int = PROJ_DIM, activation: str 
 
 
 class HeadPair:
-    """State head + action head from one checkpoint, hot-reloaded when the file changes."""
+    """State head + action head from one checkpoint, hot-reloaded when the file changes.
 
-    def __init__(self, name: str, path: str, device: str | None = None):
-        self.name, self.path, self.device = name, path, device or default_device()
+    With ``encoder`` set, a checkpoint trained on any other encoder is refused at load.
+    """
+
+    def __init__(self, name: str, path: str, device: str | None = None, encoder: EncoderSpec | None = None):
+        self.name, self.path, self.device, self.encoder = name, path, device or default_device(), encoder
         self.mtime: float | None = None
         self.state_head = self.action_head = None
         self.generation = 0          # bumped on every (re)load; stamps cached projections
@@ -82,6 +86,8 @@ class HeadPair:
         import torch
         ck = torch.load(self.path, map_location="cpu")
         cfg = dict(ck["cfg"])
+        if self.encoder is not None:
+            check_compatible(checkpoint_encoder(cfg), self.encoder, what=f"head {self.name!r} ({self.path})")
         kw = dict(width=cfg["width"], depth=cfg["depth"],
                   proj=ck.get("projection_dim", cfg.get("projection_dim", PROJ_DIM)),
                   activation=cfg.get("activation", "gelu"), layernorm=cfg.get("layernorm", False),
@@ -115,7 +121,7 @@ class HeadPair:
         return self._project(self.action_head, candidates)
 
     def project(self, states: np.ndarray, candidates: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """L2-normalised projections of [n, HIDDEN] state and candidate embeddings."""
+        """L2-normalised projections of [n, hidden] state and candidate embeddings."""
         zs, zc = self.project_states(states), self.project_actions(candidates)
         return zs.cpu().numpy(), zc.cpu().numpy()
 
@@ -130,14 +136,12 @@ class HeadPair:
         return sum(p.numel() for h in (self.state_head, self.action_head) for p in h.parameters())
 
 
-def download(repo: str = HF_REPO, filename: str = HF_FILE, dest_dir: str = DEFAULT_CKPT_DIR,
-             force: bool = False) -> str:
+def download(repo: str, filename: str, dest_dir: str = DEFAULT_CKPT_DIR, force: bool = False) -> str:
     """Fetch a checkpoint from the Hugging Face Hub; returns the local path."""
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, filename)
     if os.path.exists(dest) and not force:
         return dest
-    _count_download(repo)
     try:
         from huggingface_hub import hf_hub_download
         return hf_hub_download(repo, filename, local_dir=dest_dir, force_download=force)
@@ -154,30 +158,11 @@ def download(repo: str = HF_REPO, filename: str = HF_FILE, dest_dir: str = DEFAU
         return dest
 
 
-def _count_download(repo: str) -> None:
-    """The Hub counts a model download per request to the repo's ``config.json``
-    (https://huggingface.co/docs/hub/models-download-stats); best-effort, never fails."""
-    try:
-        import requests
-        requests.head(f"https://huggingface.co/{repo}/resolve/main/config.json", timeout=5)
-    except Exception:
-        pass
-
-
-def default_checkpoint() -> str | None:
-    """Path of the reference head if present (``CLM_CKPT`` overrides), else None."""
-    p = os.environ.get("CLM_CKPT")
-    if p and os.path.exists(p):
-        return p
-    p = os.path.join(DEFAULT_CKPT_DIR, HF_FILE)
-    return p if os.path.exists(p) else None
-
-
 def download_main() -> None:
     import argparse
     ap = argparse.ArgumentParser(description="Download a CLM projection-head checkpoint from the Hugging Face Hub.")
-    ap.add_argument("--repo", default=HF_REPO)
-    ap.add_argument("--file", default=HF_FILE)
+    ap.add_argument("--repo", required=True, help="Hugging Face model repo holding the head")
+    ap.add_argument("--file", required=True, help="checkpoint file in that repo, e.g. best_head.pt")
     ap.add_argument("--dest", default=DEFAULT_CKPT_DIR)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()

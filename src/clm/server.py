@@ -21,14 +21,16 @@ import argparse
 import asyncio
 import os
 import time
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .embedder import EmbedderError
+from .encoders import ENCODERS, IncompatibleEncoder, get_encoder
 from .engine import DEFAULT_MODEL, Engine, ModelNotFound
-from .heads import DEFAULT_CKPT_DIR, HF_FILE, default_device, download
+from .heads import default_device
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
@@ -84,6 +86,11 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
         out = {"ok": True, "embedder": engine.embedder.healthy(),
                "models": [m["name"] for m in engine.models()],
                "cache": engine.arena.stats() if engine.arena else None}
+        spec = getattr(engine, "encoder", None)
+        if spec is not None:            # the playground names the encoder and how to start it
+            port = urlsplit(engine.embedder.url).port or 8090
+            out["encoder"] = {"name": spec.name, "hf_id": spec.hf_id,
+                              "serve": spec.vllm_command(port, getattr(engine.embedder, "max_tokens", None))}
         if getattr(engine, "mock", False):      # tools/playground_mock.py: the UI warns about fake numbers
             out["mock"] = True
         return out
@@ -169,11 +176,17 @@ def main() -> None:
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("CLM_PORT", 8700)))
     ap.add_argument("--emb-url", default=os.environ.get("CLM_EMB_URL", "http://127.0.0.1:8090/v1/embeddings"))
-    ap.add_argument("--emb-model", default=os.environ.get("CLM_EMB_MODEL", "qwen3-8b"))
-    ap.add_argument("--max-tokens", type=int, default=int(os.environ.get("CLM_EMB_MAX_TOKENS", 2048)),
-                    help="truncate texts to this many tokens before embedding (the embedder's max-model-len)")
+    ap.add_argument("--encoder", choices=sorted(ENCODERS), default=get_encoder().name,
+                    help="frozen encoder behind --emb-url; heads trained on any other encoder are refused "
+                         "(default: nemotron-3-embed-8b; CLM_ENCODER overrides)")
+    ap.add_argument("--emb-model", default=os.environ.get("CLM_EMB_MODEL"),
+                    help="model name the embedder was started with (default: the encoder's name)")
+    ap.add_argument("--max-tokens", type=int,
+                    default=int(os.environ["CLM_EMB_MAX_TOKENS"]) if os.environ.get("CLM_EMB_MAX_TOKENS") else None,
+                    help="truncate texts to this many tokens before embedding, at most the embedder's "
+                         "max-model-len (default: the encoder's budget)")
     ap.add_argument("--ckpt", default=os.environ.get("CLM_CKPT"),
-                    help=f"checkpoint served as clm-latest (default: {DEFAULT_CKPT_DIR}/{HF_FILE}, downloaded if missing)")
+                    help="checkpoint served as clm-latest, trained on --encoder (CLM_CKPT)")
     ap.add_argument("--ckpt-dir", default=None, help="also serve every *.pt in this directory under its file stem")
     ap.add_argument("--model", action="append", default=[], metavar="NAME=PATH", help="serve an extra checkpoint as NAME")
     ap.add_argument("--device", default=None,
@@ -182,7 +195,6 @@ def main() -> None:
                     help="GPU memory reserved at start-up for reused state and action vectors: a fraction "
                          "of the device (0.02, the default) or a size (512MiB); 0 disables it. "
                          "Environment: CLM_ACTION_CACHE")
-    ap.add_argument("--no-download", action="store_true", help="fail instead of downloading the reference head")
     ap.add_argument("--no-ui", action="store_true", help="do not serve the playground at /")
     ap.add_argument("--cors", action="store_true",
                     help="allow browser requests from any origin (needed to drive this server from a "
@@ -190,9 +202,8 @@ def main() -> None:
     args = ap.parse_args()
 
     from .embedder import Embedder
+    spec = get_encoder(args.encoder)
     ckpt = args.ckpt
-    if not ckpt and not args.no_download:
-        ckpt = download()
     extra = {}
     for spec in args.model:
         name, _, path = spec.partition("=")
@@ -200,15 +211,22 @@ def main() -> None:
             raise SystemExit(f"--model expects NAME=PATH, got {spec!r}")
         extra[name] = path
     device = args.device or default_device()
-    engine = Engine(Embedder(args.emb_url, args.emb_model, max_tokens=args.max_tokens), checkpoint=ckpt,
-                    models=extra, checkpoint_dir=args.ckpt_dir, device=device,
-                    action_cache=args.action_cache)
+    try:
+        engine = Engine(Embedder(args.emb_url, args.emb_model, max_tokens=args.max_tokens, encoder=spec),
+                        checkpoint=ckpt, models=extra, checkpoint_dir=args.ckpt_dir, device=device,
+                        action_cache=args.action_cache)
+    except IncompatibleEncoder as e:
+        raise SystemExit(f"[clm] {e}") from e
     if not engine.heads and not extra:
-        raise SystemExit("no checkpoint: pass --ckpt or let clm-serve download the reference head")
+        raise SystemExit(f"no checkpoint: pass --ckpt / --ckpt-dir / --model with a head trained on "
+                         f"{spec.hf_id} (train one with train/finetune.py --encoder {spec.name})")
     api_key = os.environ.get("CLM_API_KEY")
     app = create_app(engine, api_key, ui=not args.no_ui, cors=args.cors)
     print(f"[clm] models {[m['name'] for m in engine.models()]} on {device}", flush=True)
-    print(f"[clm] embedder {args.emb_url} ({args.emb_model}) {'up' if engine.embedder.healthy() else 'NOT REACHABLE'}; "
+    print(f"[clm] encoder {spec.name} = {spec.hf_id} ({spec.origin}); {spec.hidden_size}-d, {spec.pooling} pooling, "
+          f"{engine.embedder.max_tokens}-token budget, truncation "
+          f"{'client-side' if engine.embedder.tokenizer is not None else 'by the embedder'}", flush=True)
+    print(f"[clm] embedder {args.emb_url} ({engine.embedder.model}) {'up' if engine.embedder.healthy() else 'NOT REACHABLE'}; "
           f"auth {'on' if api_key else 'off'}", flush=True)
     arena = engine.arena
     if arena:

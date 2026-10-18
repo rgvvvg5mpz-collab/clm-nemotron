@@ -59,14 +59,14 @@
 
 <div id="mock-banner" class="mock-banner" hidden>
   <strong>Mock encoder.</strong> This server is running <code>tools/playground_mock.py</code>, which replaces
-  Qwen3-8B with character n-grams — the numbers below are lexical-overlap noise, not CLM predictions.
+  the Nemotron-3-Embed-8B encoder with character n-grams — the numbers below are lexical-overlap noise, not CLM predictions.
 </div>
 
 <div id="encoder-banner" class="mock-banner" role="alert" hidden>
   <strong>GPU encoder is not running.</strong> <span id="encoder-banner-text"></span>
   Start it and this page reconnects on its own:
-  <pre class="cmd">vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling \
-     --enable-prefix-caching --max-model-len 2048 --gpu-memory-utilization 0.35 --port 8090</pre>
+  <pre class="cmd" id="encoder-cmd">vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b --runner pooling \
+     --enable-prefix-caching --max-model-len 8192 --gpu-memory-utilization 0.35 --port 8090</pre>
 </div>
 
 <main class="layout">

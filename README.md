@@ -34,6 +34,14 @@ TypeSafe-compatible API.
 
 We invite the community to plug it into their own agents and benchmarks!
 
+> **This fork runs CLM on NVIDIA Nemotron-3-Embed-8B** (`nvidia/Nemotron-3-Embed-8B-BF16`,
+> built on Mistral AI's Ministral-3-8B, OpenMDW-1.1 licence) as its frozen encoder.
+> The heads are tied to the encoder they were trained on. The results above were measured
+> upstream with a head on a different encoder, so they don't carry over. Serving needs a head
+> trained on Nemotron embeddings ([Fine-tuning](#fine-tuning-clm-on-your-own-data)).
+> `clm-serve` and `train/finetune.py` refuse any head or embedding set from another encoder,
+> or one that records no encoder (every upstream release).
+
 ---
 
 ## Installation
@@ -55,16 +63,26 @@ pip install -e .
 ### Serve
 
 ```bash
-# 1. encoder (Qwen3-8B embeddings)
-vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling --max-model-len 2048 --port 8090 &
+# 1. encoder (Nemotron-3-Embed-8B embeddings; or ./serve_nemotron3_embed_8b.sh)
+vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b --runner pooling \
+    --enable-prefix-caching --max-model-len 8192 --port 8090 &
 
-# 2. CLM API on :8700 (downloads the 75 MB reference head on first run)
-clm-serve
+# 2. CLM API on :8700 with a head trained on Nemotron embeddings
+clm-serve --ckpt runs/typed/best_head.pt
 ```
 
-States longer than 2048 tokens are truncated. For longer states, raise both limits
-together, e.g. `--max-model-len 8192` on `vllm serve` and `clm-serve --max-tokens 8192`
-(needs more GPU memory).
+No released head exists for Nemotron yet, so step 2 needs one you trained with
+`train/finetune.py --encoder nemotron-3-embed-8b`; `clm-serve` will not start without
+one. To try the encoder on its own first, use the in-process engine with no head and
+`model="clm-raw"` (cosine in the encoder's own space):
+`Engine().answer(state, questions, model="clm-raw")`.
+`clm-serve` adds Nemotron's `query: ` prompt to states and `passage: ` to candidates.
+
+States are truncated to 8192 tokens, keeping their end, and candidates keep their start.
+Truncation happens in `clm-serve` with the encoder's tokenizer, so the prompt is never cut.
+The model accepts up to 32768 tokens: raise `--max-model-len` on `vllm serve` and
+`clm-serve --max-tokens` together (this needs more GPU memory). On Hopper or Ada GPUs,
+`--quantization fp8_per_tensor` halves the encoder's memory.
 
 ### Ask typed questions about a state
 
@@ -103,7 +121,8 @@ in-process engine's `rank`:
 ```python
 from clm import Engine
 
-engine = Engine(emb_url="http://127.0.0.1:8090/v1/embeddings")     # reference head, downloaded if missing
+engine = Engine(emb_url="http://127.0.0.1:8090/v1/embeddings",      # Nemotron-3-Embed-8B by default
+                checkpoint="runs/typed/best_head.pt")                   # a head trained on that encoder
 engine.rank("What causes tides on Earth?",
             ["The Moon's gravitational pull.", "Photosynthesis in plants.", "Because the Earth is round."])
 # [{'rank': 1, 'candidate': "The Moon's gravitational pull.", 'prob': 0.997}, ...]
@@ -126,7 +145,7 @@ candidate set, and links are shareable.
          src="assets/playground.png" width=100%>
   </picture>
   <br>
-  <sub>Captured against a real <code>clm-serve</code> (<code>clm-latest</code>, Qwen3-8B encoder on one RTX 4090).</sub>
+  <sub>Upstream screenshot, captured with a head on a different encoder; Nemotron heads give different numbers.</sub>
 </p>
 
 Remote server? `ssh -L 8700:localhost:8700 <host>`. API only: `clm-serve --no-ui`.
@@ -167,21 +186,33 @@ fine-tuning, CLM reaches SOTA on both (**81.6%** and **87.6%**) while running
 
 See [docs/FINETUNING.md](docs/FINETUNING.md).
 
+Heads train from scratch on text with Nemotron (the default `--encoder`). There is no
+Nemotron warm start yet, and upstream embedding datasets were built with a different encoder,
+so they are refused. `--embed-url` points at the encoder from the quickstart; leave it out to
+embed with in-process vLLM instead.
+
 ```bash
-# reproduce the task-disjoint DeepSWE heldout-38 result (31/38 = 81.6%)
-hf download Contrastive-LM/deepswe-clm-heads-8k --local-dir heads/deepswe
-python evaluation/bon_eval.py --hf-dataset Contrastive-LM/deepswe-clm-embeddings-8k \
-    --checkpoint heads/deepswe/best_head.pt \
-    --tasks-file heads/deepswe/heldout_tasks.json --n 4 --window 12
-
-# fine-tune the matching DeepSWE head
-python train/finetune.py --task clm --init-ckpt "$(clm-download)" --out-dir runs/deepswe \
-    --holdout-tasks heads/deepswe/heldout_tasks.json --batch 512
-
 # typed decisions
 python train/finetune.py --task choice --data LocalLLaMA/typed-decisions --workflow all \
-    --init-ckpt "$(clm-download)" --out-dir runs/typed
+    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
+    --out-dir runs/typed
+
+# agentic step traces (state / action / task_id / step_idx / reward per line), e.g. your own DeepSWE runs
+python train/finetune.py --task clm --data traces.jsonl \
+    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
+    --holdout-tasks heldout_tasks.json --out-dir runs/agentic
 ```
+
+Then score best-of-N on held-out tasks with the matching embeddings
+(`finetune.py` caches them under `runs/agentic/embeddings/`):
+
+```bash
+python evaluation/bon_eval.py --embeddings-dir runs/agentic/embeddings/<dir> \
+    --checkpoint runs/agentic/best_head.pt --tasks-file heldout_tasks.json --n 4 --window 12
+```
+
+To share a trained head, upload it to a Hub model repo; `clm-download --repo <user>/<repo>
+--file best_head.pt` fetches it to `~/.cache/clm/`.
 
 ---
 
@@ -219,7 +250,7 @@ browser ──► clm-serve  (CPU, :8700)   GET / (playground)
 client  ──►                          POST /v1/systemone · GET /v1/models · GET /health
                │       state head + action head (20M params, hot-reloaded), embedding cache
                ▼
-          vLLM Qwen3-8B pooling server (GPU, :8090)   /v1/embeddings
+          vLLM Nemotron-3-Embed-8B pooling server (GPU, :8090)   /v1/embeddings
 ```
 
 ### Training Algorithm
@@ -296,14 +327,13 @@ quickly but peaks at **62.4%** before overfitting, so the two-stage recipe is
 **7 points better** at a fixed budget: hard negatives work best as a refinement
 on top of pre-training, not a substitute for it.
 
-The reference head served as `clm-latest` is
-[Contrastive-LM/CLM-v0.1-8B](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B)
-(`CLM_v0.1-8B.pt`, Qwen3-8B backbone, last-token pooling). Any head in
-the same checkpoint format — a `torch.save` dict with `state_head` /
+There is no default head in this fork. Any head in the CLM checkpoint format,
+trained on the configured encoder, can be served with `--ckpt`. The format is a `torch.save` dict with `state_head` /
 `action_head` state dicts, `logit_scale` and `cfg` (`width`, `depth`,
-`projection_dim`, `activation`, `layernorm`, `residual`) — can be served with
-`--ckpt`; a head only makes sense with the encoder and pooling it was trained
-against.
+`projection_dim`, `activation`, `layernorm`, `residual`, `hidden_size`,
+`encoder`). A head only makes sense with the encoder it was trained against.
+`cfg["encoder"]` records that encoder, and `clm-serve` refuses a mismatch or a
+checkpoint that records none (upstream releases).
 
 ---
 
@@ -334,7 +364,7 @@ If you find CLM useful, please consider citing it:
 
 ## License
 
-The code in this repository is released under the [Apache 2.0 License](LICENSE). The CLM-8B weights are released under Apache 2.0 on [Hugging Face](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B).
+The code in this repository is released under the [Apache 2.0 License](LICENSE). The default encoder, Nemotron-3-Embed-8B, is under NVIDIA's OpenMDW-1.1 licence.
 
 ---
 
@@ -343,14 +373,14 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 ```
 .
 ├── pyproject.toml               # the clm package (installed editable by requirements.txt)
-├── serve_qwen3_8b.sh            # launch the Qwen3-8B pooling encoder on a GPU
-├── download_head.sh             # fetch the released head (`clm-download` does the same)
+├── serve_nemotron3_embed_8b.sh  # launch the Nemotron-3-Embed-8B encoder on a GPU (default)
 ├── assets/                      # logo + the playground screenshot used above
 ├── src/clm/                     # inference: the package `clm-serve` and `clm` ship
 │   ├── __init__.py              #   from clm import CLMClient, Noul, Choice, Score, Engine
 │   ├── client.py                #   CLMClient + question / answer types (no torch needed)
 │   ├── schema.py                #   question -> (state text, candidate texts); logits -> Answer
 │   ├── engine.py                #   Engine.answer(...) / Engine.rank(...): the inference engine
+│   ├── encoders.py              #   encoder profiles: prompts, truncation, checkpoint compatibility
 │   ├── heads.py                 #   head architecture, checkpoint load / hot-reload / download
 │   ├── embedder.py              #   /v1/embeddings client + LRU cache of normalised embeddings
 │   ├── cache.py                 #   the reserved vector arena behind --action-cache
@@ -367,6 +397,7 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 ├── examples/                    # CLM vs Jev on the T-Rex runner (examples/t_rex/README.md)
 │   ├── common.py                #   one client for both endpoints: retries, latency, cache
 │   └── t_rex/                   #   Chrome dinosaur game in real time (run.py --model clm|jev)
+├── tests/                       # pytest tests/  (no GPU needed)
 └── docs/FINETUNING.md           # the fine-tuning guide
 ```
 
@@ -424,18 +455,22 @@ files only; every API route above shadows it.
 ### `clm-serve` options
 
 ```
-clm-serve [--port 8700] [--emb-url http://127.0.0.1:8090/v1/embeddings] [--emb-model qwen3-8b]
-          [--max-tokens 2048] [--ckpt PATH] [--ckpt-dir DIR] [--model NAME=PATH ...] [--device cpu|cuda]
+clm-serve [--port 8700] [--encoder nemotron-3-embed-8b]
+          [--emb-url http://127.0.0.1:8090/v1/embeddings] [--emb-model NAME]
+          [--max-tokens 8192] [--ckpt PATH] [--ckpt-dir DIR] [--model NAME=PATH ...] [--device cpu|cuda]
           [--action-cache 0.02|512MiB|0] [--no-ui] [--cors]
 ```
 
-`--ckpt PATH` serves your own head as `clm-latest` (default: the reference
-head in `~/.cache/clm/`, downloaded if missing); `--ckpt-dir DIR` serves every
+`--encoder` names the frozen encoder behind `--emb-url`. It sets the
+prompts, the token budget and the expected width, and heads trained on
+any other encoder are refused. `--emb-model` defaults to the encoder's name.
+`--ckpt PATH` (or `CLM_CKPT`) serves a head as `clm-latest`; there is no default.
+`--ckpt-dir DIR` serves every
 `*.pt` there under its file stem; `--model NAME=PATH` adds one more.
 The heads run on the GPU when torch sees one, else on the CPU; `--device` (or
 `CLM_DEVICE`) forces one. Checkpoints hot-reload when the file changes. Set `CLM_API_KEY` to require
 `Authorization: Bearer <key>` (the playground has a field for it). Environment
-equivalents: `CLM_PORT`, `CLM_EMB_URL`, `CLM_EMB_MODEL`, `CLM_CKPT`,
+equivalents: `CLM_ENCODER`, `CLM_PORT`, `CLM_EMB_URL`, `CLM_EMB_MODEL`, `CLM_EMB_MAX_TOKENS`, `CLM_CKPT`,
 `CLM_DEVICE`, `CLM_ACTION_CACHE`.
 
 `--no-ui` drops the playground and serves the API alone. `--cors` allows browser

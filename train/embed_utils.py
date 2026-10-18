@@ -1,10 +1,12 @@
-"""Encoder embeddings (Qwen3-8B, last-token pooling) with the token recipe of the
-DeepSWE precompute in the research repo's ``main`` branch.
+"""Encoder embeddings for training, with the same input format ``clm-serve`` uses.
 
-* ``Recipe.state_ids``: chat template, last ``max_len - 1`` tokens; string states are
-  tokenized as text, tail kept.
-* ``Recipe.text_ids``: text without special tokens; ``keep="head"`` keeps the first
-  ``max_len - 1`` tokens, ``keep="tail"`` the last.
+``Recipe(encoder, max_len).ids(x, role)`` turns a state (``role="state"``: text or
+chat messages) or a candidate (``role="action"``) into token ids:
+
+chat messages are rendered as ``role: content`` text, then ``EncoderSpec.prepare``
+adds the role prefix (Nemotron's ``query: `` / ``passage: ``) and truncates the
+body exactly as the serving embedder does, and the result is tokenized with the
+encoder's special tokens.
 
 Backends take token ids: ``OfflineBackend`` (in-process vLLM) and ``ServerBackend``
 (``vllm serve <model> --runner pooling``).
@@ -19,13 +21,24 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 from clm.embedder import EmbedderError, l2  # noqa: E402
+from clm.encoders import EncoderSpec, get_encoder, render_messages  # noqa: E402
 
 
 class Recipe:
-    def __init__(self, model: str = "Qwen/Qwen3-8B", max_len: int = 8192):
+    def __init__(self, encoder: "str | EncoderSpec | None" = None, max_len: int = 8192, model: str | None = None):
+        """``model`` overrides where the tokenizer is loaded from (default: the encoder's HF id)."""
         from transformers import AutoTokenizer
-        self.tok = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
-        self.cap = max_len - 1
+        self.spec = get_encoder(encoder)
+        self.tok = AutoTokenizer.from_pretrained(model or self.spec.hf_id)
+        self.max_len = max_len
+
+    def ids(self, x, role: str) -> list[int]:
+        """Token ids for a state (text or chat messages) or a candidate, as ``clm-serve`` sends them."""
+        if not isinstance(x, str):
+            x = render_messages(x)
+        text = self.spec.prepare(x, role, self.tok, self.max_len)
+        ids = self._flatten(self.tok(text, add_special_tokens=self.spec.add_special_tokens)["input_ids"])
+        return ids[:self.max_len]       # decode/re-encode can overshoot by a token or two
 
     @staticmethod
     def _flatten(out) -> list[int]:
@@ -35,18 +48,6 @@ class Recipe:
         if out and isinstance(out[0], list):
             out = out[0]
         return list(out)
-
-    def text_ids(self, text: str, keep: str = "head") -> list[int]:
-        ids = self._flatten(self.tok(text, add_special_tokens=False)["input_ids"])
-        if not ids:
-            ids = self._flatten(self.tok(" ", add_special_tokens=False)["input_ids"])
-        return ids[:self.cap] if keep == "head" else ids[-self.cap:]
-
-    def state_ids(self, state) -> list[int]:
-        if isinstance(state, str):
-            return self.text_ids(state, keep="tail")
-        ids = self._flatten(self.tok.apply_chat_template(state, tokenize=True, add_generation_prompt=False))
-        return ids[-self.cap:]
 
 
 class OfflineBackend:
@@ -101,6 +102,18 @@ class ServerBackend:
         return l2(np.stack(out).astype(np.float32))
 
 
-def make_backend(url: str | None, model: str, max_len: int, gpu_mem: float = 0.85, served_name: str | None = None):
-    """Server backend when ``url`` is given, else offline vLLM."""
-    return ServerBackend(url, served_name or model) if url else OfflineBackend(model, max_len, gpu_mem)
+def make_backend(url: str | None, model: str, max_len: int, gpu_mem: float = 0.85, served_name: str | None = None,
+                 hidden_size: int | None = None):
+    """Server backend when ``url`` is given, else offline vLLM; checks the embedding width."""
+    backend = ServerBackend(url, served_name or model) if url else OfflineBackend(model, max_len, gpu_mem)
+    if hidden_size is None:
+        return backend
+    inner = backend.embed
+
+    def embed(id_lists):
+        out = inner(id_lists)
+        if out.shape[-1] != hidden_size:
+            raise EmbedderError(f"encoder returned {out.shape[-1]}-d vectors, expected {hidden_size}-d for {model}")
+        return out
+    backend.embed = embed
+    return backend

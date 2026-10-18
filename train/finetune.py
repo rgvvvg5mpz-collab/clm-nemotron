@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fine-tune the CLM projection heads on a frozen Qwen3-8B encoder.
+"""Fine-tune the CLM projection heads on a frozen encoder (default Nemotron-3-Embed-8B).
 
 Tasks (``--task``)
   clm     (state, action) step traces from DeepSWE or custom data;
@@ -15,11 +15,17 @@ Tasks (``--task``)
 
 Embeddings (clm)
   --emb-dir DIR        embedding dir (embed_shard.py + merge_embeddings.py output)
-  --hf-dataset REPO    native or parquet embedding dataset (defaults from
-                       --benchmark when no CLM data source is supplied)
+  --hf-dataset REPO    native or parquet embedding dataset written by this fork
   --data FILE          step transitions (.json / .jsonl), embedded from scratch
 choice always embeds from scratch, with offline vLLM or a vLLM pooling server
 (``--embed-url``).
+
+Encoder (``--encoder``, default nemotron-3-embed-8b)
+  Heads are tied to the frozen encoder they were trained on: its identity is recorded in
+  every embedding dir and checkpoint (``cfg["encoder"]``), and an embedding dir, warm-start
+  checkpoint or dataset from another encoder, or one that records no encoder (every
+  upstream CLM release), is refused.  Train from text: ``--data`` for clm,
+  typed-decisions for choice.
 
 Checkpoints hold state_head / action_head / logit_scale / cfg.
 """
@@ -51,6 +57,7 @@ sys.path.insert(0, HERE)
 import adapters  # noqa: E402
 import embed_utils  # noqa: E402
 import hf_embeddings  # noqa: E402
+from clm.encoders import ENCODERS, check_compatible, checkpoint_encoder, get_encoder  # noqa: E402
 from clm.heads import make_head  # noqa: E402
 
 
@@ -127,21 +134,24 @@ def clm_embedding_dir(args) -> str:
     if args.hf_dataset:
         return hf_embeddings.download(args.hf_dataset, os.path.join(cache, _slug(args.hf_dataset)),
                                       cache_dir=args.hf_cache, split=args.hf_split)
-    out = os.path.join(cache, "clm_" + _slug(os.path.splitext(os.path.basename(args.data))[0]))
+    spec = get_encoder(args.encoder)
+    out = os.path.join(cache, f"clm_{spec.name}_{args.max_len}_" +
+                       _slug(os.path.splitext(os.path.basename(args.data))[0]))
     if hf_embeddings.is_embedding_dir(out):
         print(f"[clm] reusing embeddings in {out}", flush=True)
         return out
     recs = adapters.read_transitions(args.data)
-    recipe = embed_utils.Recipe(args.embed_model, args.max_len)
-    backend = embed_utils.make_backend(args.embed_url, args.embed_model, args.max_len, args.gpu_mem,
-                                       args.served_model_name)
-    print(f"[clm] embedding {len(recs)} steps from scratch", flush=True)
-    se = backend.embed([recipe.state_ids(r["state"]) for r in recs])
-    ae = backend.embed([recipe.text_ids(r["action"], keep="head") for r in recs])
+    recipe = embed_utils.Recipe(spec, args.max_len, args.embed_model)
+    backend = embed_utils.make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len, args.gpu_mem,
+                                       args.served_model_name, spec.hidden_size)
+    print(f"[clm] embedding {len(recs)} steps from scratch with {spec.hf_id}", flush=True)
+    se = backend.embed([recipe.ids(r["state"], "state") for r in recs])
+    ae = backend.embed([recipe.ids(r["action"], "action") for r in recs])
     os.makedirs(out, exist_ok=True)
     torch.save(torch.from_numpy(se.astype(np.float16)), os.path.join(out, "state_embeddings.pt"))
     torch.save(torch.from_numpy(ae.astype(np.float16)), os.path.join(out, "action_embeddings.pt"))
-    meta = {"num_samples": len(recs), "hidden_size": int(se.shape[1]), "model_name": args.embed_model,
+    meta = {"num_samples": len(recs), "hidden_size": int(se.shape[1]),
+            "model_name": args.embed_model or spec.hf_id, "encoder": spec.identity(),
             "max_model_len": args.max_len, "input_file": os.path.abspath(args.data),
             "samples": [{k: r.get(k) for k in hf_embeddings.META_KEYS} for r in recs]}
     json.dump(meta, open(os.path.join(out, "metadata.json"), "w"))
@@ -263,6 +273,10 @@ def _train_clm(args, emb_dir, out_dir, holdout_path):
                         residual=initial.get("residual", False))
 
     metadata = json.load(open(os.path.join(emb_dir, "metadata.json")))
+    encoder = checkpoint_encoder(metadata)
+    check_compatible(encoder, get_encoder(args.encoder), what=f"embedding dir {emb_dir}")
+    if checkpoint:
+        check_compatible(checkpoint_encoder(initial), encoder, what=f"--init-ckpt {args.init_ckpt}")
     pool_tasks = sorted({sample["task_id"] for sample in metadata["samples"]})
     holdout = set(json.load(open(holdout_path))) if holdout_path else set()
     usable = [task for task in pool_tasks if task not in holdout]
@@ -313,7 +327,7 @@ def _train_clm(args, emb_dir, out_dir, holdout_path):
         return {"state_head": state_head.state_dict(), "action_head": action_head.state_dict(),
                 "logit_scale": logit_scale.detach().cpu(),
                 "cfg": {"width": width, "depth": depth, "projection_dim": args.proj,
-                        "hidden_size": hidden, **head_options, "init_ckpt": args.init_ckpt,
+                        "hidden_size": hidden, "encoder": encoder, **head_options, "init_ckpt": args.init_ckpt,
                         "sampler": args.sampler, "batch": args.batch, "lr": lr,
                         "train_dir": emb_dir}, "epoch": epoch, "metrics": metrics}
 
@@ -450,7 +464,7 @@ def run_choice(args) -> dict:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    from clm.heads import HIDDEN, make_head
+    from clm.heads import make_head
 
     train_rows = load_typed_rows(args.data, "train", args.workflow, args.hf_cache)
     test_rows = load_typed_rows(args.data, "test", args.workflow, args.hf_cache)
@@ -464,16 +478,23 @@ def run_choice(args) -> dict:
           " ".join(f"{k} {len(splits[k])}" for k in splits) + " | questions " +
           " ".join(f"{k} {len(v)}" for k, v in ex.items()), flush=True)
 
+    spec = get_encoder(args.encoder)
     cache = TextCache(os.path.join(args.embed_cache or os.path.join(args.out_dir, "embeddings"),
-                                   f"choice_{_slug(args.embed_model)}_{args.max_len}.npz"))
-    texts = [t for v in ex.values() for e in v for t in (e.state_text, *e.candidates)]
-    todo = cache.missing(texts)
-    if todo:
-        recipe = embed_utils.Recipe(args.embed_model, args.max_len)
-        backend = embed_utils.make_backend(args.embed_url, args.embed_model, args.max_len, args.gpu_mem,
-                                           args.served_model_name)
-        print(f"[choice] embedding {len(todo)} unique texts", flush=True)
-        cache.add(todo, backend.embed([recipe.text_ids(t, keep="tail") for t in todo]))
+                                   f"choice_{spec.name}_{args.max_len}.npz"))
+    # states and candidates embed with different prompts, so the cache keys carry the role
+    skey, akey = (lambda t: "state\x00" + t), (lambda t: "action\x00" + t)
+    examples = [e for v in ex.values() for e in v]
+    todo = {"state": cache.missing(skey(e.state_text) for e in examples),
+            "action": cache.missing(akey(t) for e in examples for t in e.candidates)}
+    if any(todo.values()):
+        recipe = embed_utils.Recipe(spec, args.max_len, args.embed_model)
+        backend = embed_utils.make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len,
+                                           args.gpu_mem, args.served_model_name, spec.hidden_size)
+        for role, keys in todo.items():
+            if keys:
+                print(f"[choice] embedding {len(keys)} unique {role} texts with {spec.hf_id}", flush=True)
+                cache.add(keys, backend.embed([recipe.ids(k.split("\x00", 1)[1], role) for k in keys]))
+    hidden = int(next(iter(cache.vecs.values())).shape[-1])
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
@@ -483,8 +504,8 @@ def run_choice(args) -> dict:
             buckets[len(e.keys)].append(e)
         out = []
         for k, es in buckets.items():
-            q = torch.tensor(np.stack([cache[e.state_text] for e in es]), dtype=torch.float32)
-            c = torch.tensor(np.stack([[cache[t] for t in e.candidates] for e in es]), dtype=torch.float32)
+            q = torch.tensor(np.stack([cache[skey(e.state_text)] for e in es]), dtype=torch.float32)
+            c = torch.tensor(np.stack([[cache[akey(t)] for t in e.candidates] for e in es]), dtype=torch.float32)
             out.append((q.to(device), c.to(device),
                         torch.tensor([e.target for e in es], device=device),
                         torch.tensor([e.label for e in es], device=device), [e.qid for e in es]))
@@ -496,10 +517,13 @@ def run_choice(args) -> dict:
     cfg = dict(width=args.width or 1536, depth=args.depth or 3, activation="gelu", layernorm=True, residual=False)
     if ck:
         c0 = ck.get("cfg", {})
+        check_compatible(checkpoint_encoder(c0), spec, what=f"--init-ckpt {args.init_ckpt}")
         cfg.update({k: c0[k] for k in ("width", "depth", "activation", "layernorm", "residual") if k in c0})
     proj = (ck or {}).get("cfg", {}).get("projection_dim", args.proj)
-    sh = make_head(cfg["width"], cfg["depth"], proj, cfg["activation"], cfg["layernorm"], cfg["residual"]).to(device)
-    ah = make_head(cfg["width"], cfg["depth"], proj, cfg["activation"], cfg["layernorm"], cfg["residual"]).to(device)
+    sh = make_head(cfg["width"], cfg["depth"], proj, cfg["activation"], cfg["layernorm"], cfg["residual"],
+                   hidden=hidden).to(device)
+    ah = make_head(cfg["width"], cfg["depth"], proj, cfg["activation"], cfg["layernorm"], cfg["residual"],
+                   hidden=hidden).to(device)
     logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), device=device))
     if ck:
         sh.load_state_dict(ck["state_head"]); ah.load_state_dict(ck["action_head"])
@@ -587,9 +611,10 @@ def run_choice(args) -> dict:
     def blob(epoch, metrics):
         return {"state_head": sh.state_dict(), "action_head": ah.state_dict(),
                 "logit_scale": logit_scale.detach().cpu(),
-                "cfg": {**cfg, "projection_dim": proj, "hidden_size": HIDDEN, "task": "choice",
-                        "targets": args.targets, "loss": args.loss, "data": args.data, "workflow": args.workflow,
-                        "embed_model": args.embed_model, "max_len": args.max_len,
+                "cfg": {**cfg, "projection_dim": proj, "hidden_size": hidden, "encoder": spec.identity(),
+                        "task": "choice", "targets": args.targets, "loss": args.loss, "data": args.data,
+                        "workflow": args.workflow, "embed_model": args.embed_model or spec.hf_id,
+                        "max_len": args.max_len,
                         "init_ckpt": os.path.basename(args.init_ckpt) if args.init_ckpt else None},
                 "epoch": epoch, "metrics": metrics}
 
@@ -646,19 +671,20 @@ def main() -> None:
     ap.add_argument("--task", choices=["clm", "choice"], required=True)
     ap.add_argument("--out-dir", required=True)
     src = ap.add_argument_group("data")
-    src.add_argument("--benchmark", choices=sorted(hf_embeddings.TRAIN_DATASETS), default=None,
-                     help="clm artifact profile; default: deepswe")
     src.add_argument("--emb-dir", help="clm: embedding dir to train on")
     src.add_argument("--hf-dataset",
-                     help="clm: published native/parquet embedding dataset (HF id or local path); "
-                          f"default: {hf_embeddings.DEEPSWE_TRAIN_DATASET}")
+                     help="clm: native/parquet embedding dataset written by this fork (HF id or local path)")
     src.add_argument("--data", help="clm: transitions .json/.jsonl (embedded from scratch); "
                                     "choice: typed-decisions HF id, local dir or parquet file")
     src.add_argument("--workflow", default="all", help="choice: typed-decisions config")
     src.add_argument("--hf-cache", default=None, help="Hugging Face download cache")
     src.add_argument("--hf-split", default=None, help="native HF embedding subdirectory, e.g. train")
     emb = ap.add_argument_group("from-scratch embedding")
-    emb.add_argument("--embed-model", default="Qwen/Qwen3-8B")
+    emb.add_argument("--encoder", choices=sorted(ENCODERS), default=get_encoder().name,
+                     help="frozen encoder the heads are trained on (default: nemotron-3-embed-8b; "
+                          "CLM_ENCODER overrides); prompts and truncation follow clm.encoders")
+    emb.add_argument("--embed-model", default=None,
+                     help="local path / HF id of the encoder weights and tokenizer (default: the encoder's)")
     emb.add_argument("--embed-url", default=None, help="vLLM /v1/embeddings server; offline vLLM if unset")
     emb.add_argument("--served-model-name", default=None, help="model name the server was started with")
     emb.add_argument("--max-len", type=int, default=None, help="token budget (default 8192 clm, 2048 choice)")
@@ -705,13 +731,10 @@ def main() -> None:
         ap.error("--batch must be at least 2")
 
     if args.task == "clm":
-        args.benchmark = args.benchmark or "deepswe"
         sources = sum(bool(x) for x in (args.emb_dir, args.hf_dataset, args.data))
-        if sources > 1:
-            ap.error("clm accepts only one of --emb-dir, --hf-dataset, --data")
-        if sources == 0:
-            args.hf_dataset = hf_embeddings.TRAIN_DATASETS[args.benchmark]
-            args.hf_split = args.hf_split or hf_embeddings.TRAIN_SPLITS[args.benchmark]
+        if sources != 1:
+            ap.error("clm needs exactly one of --data (transitions .jsonl, embedded with --encoder), "
+                     "--emb-dir or --hf-dataset")
         if sum(bool(x) for x in (args.holdout_folds, args.holdout_tasks, args.folds)) > 1:
             ap.error("--holdout-folds, --holdout-tasks, and --folds are mutually exclusive")
         if args.folds is not None and args.folds < 2:
@@ -723,8 +746,8 @@ def main() -> None:
         args.max_len = args.max_len or 8192
         args.batch = args.batch or 2048
     else:
-        if args.benchmark or args.hf_split:
-            ap.error("--benchmark/--hf-split are clm options")
+        if args.hf_split:
+            ap.error("--hf-split is a clm option")
         if not args.data:
             ap.error("choice needs --data (e.g. LocalLLaMA/typed-decisions)")
         if (args.emb_dir or args.hf_dataset or args.holdout_folds or args.holdout_tasks or

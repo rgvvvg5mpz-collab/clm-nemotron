@@ -24,6 +24,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "preprocessing"))
 import hf_embeddings  # noqa: E402
+from clm.encoders import check_compatible, checkpoint_encoder  # noqa: E402
 from clm.heads import HIDDEN, make_head  # noqa: E402  (released checkpoint architecture)
 
 
@@ -179,10 +180,13 @@ def main():
         plans["clm_foldwise"] = [(resolve(f["checkpoint"]), set(f["tasks"])) for f in spec]
     scored = {}
     samples = None
+    # heads only score embeddings from the encoder they were trained on
+    emb_encoder = checkpoint_encoder(json.load(open(os.path.join(args.embeddings_dir, "metadata.json"))))
     for name, parts in plans.items():
         acc = None
         for ckpt, tasks in parts:
             sh, ah, cfg = load_heads(ckpt, device)
+            check_compatible(checkpoint_encoder(cfg), emb_encoder, what=f"checkpoint {ckpt}")
             sc, samples = step_scores(args.embeddings_dir, sh, ah, device)
             if acc is None:
                 acc = torch.full_like(sc, float("nan"))

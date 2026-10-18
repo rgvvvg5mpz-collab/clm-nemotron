@@ -1,10 +1,13 @@
 """Encoder side: an OpenAI-compatible ``/v1/embeddings`` endpoint (vLLM pooling
 server) plus an LRU cache of L2-normalised embeddings.
 
-The reference head expects Qwen3-8B with last-token pooling, e.g.
+What is sent for a text is set by the encoder profile (``clm.encoders``): states
+and candidates get their role's prefix, and when the encoder's tokenizer is
+available an over-long body is truncated here, so the prefix always survives.
+The default encoder is NVIDIA Nemotron-3-Embed-8B, e.g.
 
-    vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling \\
-         --enable-prefix-caching --max-model-len 2048 --port 8090
+    vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b \\
+         --enable-prefix-caching --max-model-len 8192 --port 8090
 """
 from __future__ import annotations
 
@@ -16,6 +19,8 @@ from typing import Any
 import numpy as np
 import requests
 
+from .encoders import EncoderSpec, get_encoder, load_tokenizer
+
 
 class EmbedderError(RuntimeError):
     pass
@@ -26,10 +31,16 @@ def l2(x: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 class Embedder:
-    def __init__(self, url: str = "http://127.0.0.1:8090/v1/embeddings", model: str = "qwen3-8b",
-                 max_tokens: int | None = 2048, cache_size: int = 200_000, batch: int = 32,
-                 timeout: float = 300.0, api_key: str | None = None):
-        self.url, self.model, self.max_tokens, self.batch, self.timeout = url, model, max_tokens, batch, timeout
+    def __init__(self, url: str = "http://127.0.0.1:8090/v1/embeddings", model: str | None = None,
+                 max_tokens: int | None = None, cache_size: int = 200_000, batch: int = 32,
+                 timeout: float = 300.0, api_key: str | None = None,
+                 encoder: "str | EncoderSpec | None" = None, tokenizer: Any = "auto"):
+        self.spec = get_encoder(encoder)
+        self.url, self.batch, self.timeout = url, batch, timeout
+        self.model = model or self.spec.name
+        self.max_tokens = self.spec.max_tokens if max_tokens is None else max_tokens
+        # "auto": the encoder's own tokenizer when transformers is installed, for truncation
+        self.tokenizer = load_tokenizer(self.spec) if tokenizer == "auto" else tokenizer
         self.cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self.cache_size = cache_size
         self._lock = threading.Lock()
@@ -53,11 +64,24 @@ class Embedder:
             e = d["embedding"]
             v = (np.frombuffer(base64.b64decode(e), dtype=np.float32) if isinstance(e, str)
                  else np.asarray(e, dtype=np.float32))
+            if v.shape[-1] != self.spec.hidden_size:
+                raise EmbedderError(f"embedder returned {v.shape[-1]}-d vectors but encoder "
+                                    f"{self.spec.name!r} is {self.spec.hidden_size}-d; is {self.url} "
+                                    f"serving {self.spec.hf_id}?")
             out[d["index"]] = l2(v.astype(np.float32))
         return out, int((j.get("usage") or {}).get("prompt_tokens", 0) or 0)
 
-    def embed(self, texts: list[str]) -> tuple[np.ndarray, int]:
-        """-> ([n, hidden] L2-normalised embeddings, encoder tokens spent on cache misses)."""
+    @property
+    def dim(self) -> int:
+        return self.spec.hidden_size
+
+    def embed(self, texts: list[str], role: str | None = None) -> tuple[np.ndarray, int]:
+        """-> ([n, hidden] L2-normalised embeddings, encoder tokens spent on cache misses).
+
+        ``role`` (``"state"`` / ``"action"``) picks the encoder's prefix; ``None``
+        embeds the texts verbatim.  The cache is keyed by the text actually sent.
+        """
+        texts = [self.spec.prepare(t, role, self.tokenizer, self.max_tokens) for t in texts]
         vecs: dict[str, np.ndarray] = {}
         todo: list[str] = []
         with self._lock:

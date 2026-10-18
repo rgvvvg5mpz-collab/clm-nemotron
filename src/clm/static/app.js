@@ -196,7 +196,14 @@ function setStatus(cls, text, title) {
 }
 
 // The playground assumes the GPU encoder is up; when it is not, say so up front
-// and keep re-checking until it is.
+// and keep re-checking until it is.  /health names the encoder clm-serve stands
+// behind and the command that starts it; until it answers, assume the default.
+let encoder = {
+  hf_id: 'nvidia/Nemotron-3-Embed-8B-BF16',
+  serve: 'vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b --runner pooling \\\n' +
+         '     --enable-prefix-caching --max-model-len 8192 --gpu-memory-utilization 0.35 --port 8090',
+};
+const encoderLabel = () => encoder.hf_id.split('/').pop();
 let healthTimer = null;
 function encoderDown(text) {
   $('#encoder-banner-text').textContent = text;
@@ -219,12 +226,14 @@ async function refreshStatus() {
     return;
   }
   const models = health.models || [];
+  if (health.encoder) encoder = health.encoder;
+  $('#encoder-cmd').textContent = encoder.serve;
   $('#mock-banner').hidden = !health.mock;
   $('#encoder-banner').hidden = health.embedder !== false;
   if (health.embedder === false) {
     setStatus('warn', 'encoder down',
       'clm-serve is up but its /v1/embeddings encoder is not reachable — requests will fail with 502.');
-    encoderDown('clm-serve is up, but its Qwen3-8B /v1/embeddings server is not reachable, so every request will fail.');
+    encoderDown(`clm-serve is up, but its ${encoderLabel()} /v1/embeddings server is not reachable, so every request will fail.`);
   } else {
     setStatus('ok', models.length ? `ready · ${models.length} model${models.length > 1 ? 's' : ''}` : 'ready',
       'clm-serve and the encoder are both up.');
@@ -487,10 +496,12 @@ const HINTS = {
         'This server was started with <code>CLM_API_KEY</code> set. Put the same key into connection settings (the gear icon).'],
   422: ['Invalid request',
         'The server rejected the request. The JSON tab shows exactly what was sent.'],
-  502: ['Encoder unreachable',
-        'clm-serve is up, but it cannot reach the <code>/v1/embeddings</code> backend that does the embedding. ' +
-        'Start the encoder and point <code>--emb-url</code> at it:' +
-        '<pre class="cmd">vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling \\\n     --enable-prefix-caching --max-model-len 2048 --gpu-memory-utilization 0.35 --port 8090</pre>'],
+  get 502() {                                           // names whichever encoder /health reported
+    return ['Encoder unreachable',
+            `clm-serve is up, but it cannot reach the <code>/v1/embeddings</code> backend (${esc(encoderLabel())}) ` +
+            'that does the embedding. Start the encoder and point <code>--emb-url</code> at it:' +
+            `<pre class="cmd">${esc(encoder.serve)}</pre>`];
+  },
 };
 
 function showError(e, body) {

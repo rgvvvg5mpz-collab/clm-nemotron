@@ -3,7 +3,7 @@
 
 This starts the real ``clm.server`` app (so the routes, the static mount and the
 answer schema are exactly what ``clm-serve`` exposes) against a **fake encoder**:
-character n-gram feature hashing instead of Qwen3-8B, and no projection head.
+character n-gram feature hashing instead of Nemotron-3-Embed-8B, and no projection head.
 The numbers it returns are lexical-overlap noise, not CLM predictions.  The
 server reports ``{"mock": true}`` on ``/health`` and the page shows a warning
 banner so nobody mistakes a screenshot of this for a result.
@@ -25,6 +25,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from clm.embedder import EmbedderError              # noqa: E402
+from clm.encoders import get_encoder               # noqa: E402
 from clm.schema import answer_from_logits, build_pairs  # noqa: E402
 
 DIM = 512
@@ -66,6 +67,7 @@ class MockEngine:
 
     mock = True
     arena = None          # no vector cache; /health reports it as off
+    encoder = get_encoder()   # the encoder a real server would stand behind, for the UI's messages
 
     def __init__(self, broken: bool = False):
         self.embedder = MockEmbedder(broken)
