@@ -1,0 +1,4 @@
+support-tickets.csv: 400 synthetic customer-support conversations with their gold
+category (300 train, 100 test), taken from the customer_service workflow of the
+LocalLLaMA/typed-decisions dataset (https://huggingface.co/datasets/LocalLLaMA/typed-decisions,
+Apache-2.0). Only the conversation text and the category label are kept.

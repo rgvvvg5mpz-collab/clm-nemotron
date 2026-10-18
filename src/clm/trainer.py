@@ -38,8 +38,14 @@ class TextCache:
     def missing(self, texts):
         return [t for t in dict.fromkeys(texts) if self.key(t) not in self.vecs]
 
-    def add(self, texts, vecs):
+    def update(self, texts, vecs):
         self.vecs.update({self.key(t): np.asarray(v, dtype=np.float16) for t, v in zip(texts, vecs)})
+
+    def add(self, texts, vecs):
+        self.update(texts, vecs)
+        self.save()
+
+    def save(self):
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         ks = list(self.vecs)
         np.savez(self.path, keys=np.array(ks), vecs=np.stack([self.vecs[k] for k in ks]).astype(np.float16))
@@ -48,14 +54,25 @@ class TextCache:
         return self.vecs[self.key(t)]
 
 
-def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: str = "data") -> dict:
+EMBED_CHUNK = 256      # texts per encoder call; also how often progress is reported
+
+
+def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: str = "data",
+                 progress=None, embed_fn=None) -> dict:
     """Embed every state and option with the frozen encoder, train the two heads on the
     typed questions in ``train_rows`` (a validation slice is held out by group), and
     write ``best_head.pt`` / ``final_head.pt`` / ``history.json`` to ``args.out_dir``.
 
     ``args`` carries the options of ``train/finetune.py --task choice`` / ``clm-train``.
     Returns the summary: test accuracy of the head, of ``clm-raw`` and of the majority label.
+
+    ``progress(event: dict)`` is called as work advances (``stage`` = ``embedding`` with
+    ``done`` / ``total``, ``baselines``, ``training`` with ``epoch`` / ``epochs`` /
+    ``val_acc``, ``testing``); it may raise to cancel the run.  ``embed_fn(texts, role)``
+    replaces the encoder backend, e.g. ``clm-serve``'s own embedder; it must return
+    L2-normalised vectors for the role-prefixed texts it is given unprefixed.
     """
+    report = progress or (lambda event: None)
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
@@ -84,14 +101,24 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
     examples = [e for v in ex.values() for e in v]
     todo = {"state": cache.missing(skey(e.state_text) for e in examples),
             "action": cache.missing(akey(t) for e in examples for t in e.candidates)}
-    if any(todo.values()):
-        recipe = Recipe(spec, args.max_len, args.embed_model)
-        backend = make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len,
-                                           args.gpu_mem, args.served_model_name, spec.hidden_size)
+    total, done = sum(len(v) for v in todo.values()), 0
+    report({"stage": "embedding", "done": 0, "total": total})
+    if total:
+        if embed_fn is None:
+            recipe = Recipe(spec, args.max_len, args.embed_model)
+            backend = make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len,
+                                   args.gpu_mem, args.served_model_name, spec.hidden_size)
+            embed_fn = lambda texts, role: backend.embed([recipe.ids(t, role) for t in texts])  # noqa: E731
         for role, keys in todo.items():
-            if keys:
-                print(f"[choice] embedding {len(keys)} unique {role} texts with {spec.hf_id}", flush=True)
-                cache.add(keys, backend.embed([recipe.ids(k.split("\x00", 1)[1], role) for k in keys]))
+            if not keys:
+                continue
+            print(f"[choice] embedding {len(keys)} unique {role} texts with {spec.hf_id}", flush=True)
+            for i in range(0, len(keys), EMBED_CHUNK):
+                chunk = keys[i:i + EMBED_CHUNK]
+                cache.update(chunk, embed_fn([k.split("\x00", 1)[1] for k in chunk], role))
+                done += len(chunk)
+                report({"stage": "embedding", "done": done, "total": total})
+            cache.save()
     hidden = int(next(iter(cache.vecs.values())).shape[-1])
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
@@ -213,6 +240,9 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
     print(f"[choice] baselines: majority test {base['majority_test']:.4f} | clm-raw ({spec.name}, no head) "
           f"val {raw_val['acc']:.4f} test {raw_test['acc']:.4f}", flush=True)
     print(f"[choice] epoch 0 (init) val acc {m0['val']['acc']:.4f} test acc {m0['test']['acc']:.4f}", flush=True)
+    report({"stage": "baselines", "majority_test": base["majority_test"], "raw_test": base["raw_test"],
+            "raw_val": base["raw_val"]})
+    report({"stage": "training", "epoch": 0, "epochs": args.epochs, "val_acc": m0["val"]["acc"]})
 
     def blob(epoch, metrics):
         return {"state_head": sh.state_dict(), "action_head": ah.state_dict(),
@@ -249,6 +279,8 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
         history.append({"epoch": ep, "train_loss": tot / max(1, nb), "val": mv})
         print(f"[choice] epoch {ep} loss {tot/max(1,nb):.4f} val acc {mv['acc']:.4f} "
               f"soft_ce {mv['soft_ce']:.4f}", flush=True)
+        report({"stage": "training", "epoch": ep, "epochs": args.epochs, "val_acc": mv["acc"],
+                "train_loss": tot / max(1, nb)})
         torch.save(blob(ep, mv), os.path.join(args.out_dir, "final_head.pt"))
         if mv["acc"] > best + 1e-9:
             best, best_ep, bad = mv["acc"], ep, 0
@@ -262,6 +294,7 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
     sh.load_state_dict(best_ck["state_head"]); ah.load_state_dict(best_ck["action_head"])
     with torch.no_grad():
         logit_scale.copy_(best_ck["logit_scale"].to(device))
+    report({"stage": "testing"})
     mt = evaluate("test")
     print(f"[choice] best epoch {best_ep}: val acc {best:.4f} | TEST acc {mt['acc']:.4f} "
           f"(clm-raw {base['raw_test']:.4f}, init {m0['test']['acc']:.4f}, majority {base['majority_test']:.4f}) "

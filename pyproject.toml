@@ -58,4 +58,4 @@ Discord = "https://discord.gg/5dAQEDJBs"
 where = ["src"]
 
 [tool.setuptools.package-data]
-clm = ["py.typed", "static/*"]
+clm = ["py.typed", "static/*", "static/sample/*"]

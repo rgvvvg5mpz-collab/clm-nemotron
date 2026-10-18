@@ -35,7 +35,7 @@ from .heads import default_device
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
-_UI_FILES = ("index.html", "app.css", "app.js")
+_UI_FILES = ("index.html", "app.css", "app.js", "train.js")
 
 
 def _asset_stamp() -> str:
@@ -49,7 +49,8 @@ def _index_html() -> str:
     with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as fh:
         html = fh.read()
     v = _asset_stamp()
-    return html.replace('href="app.css"', f'href="app.css?v={v}"').replace('src="app.js"', f'src="app.js?v={v}"')
+    return (html.replace('href="app.css"', f'href="app.css?v={v}"').replace('src="app.js"', f'src="app.js?v={v}"')
+            .replace('src="train.js"', f'src="train.js?v={v}"'))
 
 
 class _RevalidatingStatic(StaticFiles):
@@ -62,13 +63,18 @@ class _RevalidatingStatic(StaticFiles):
         return response
 
 
-def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors: bool = False) -> FastAPI:
+def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors: bool = False,
+               jobs=None) -> FastAPI:
     """The API, plus the playground at ``/`` unless ``ui=False``.
 
     ``cors=True`` allows browser requests from any origin (and exposes the
     latency header), which a playground served from somewhere else needs.  It
     is off by default: an API key travels in a header the browser would then
     be free to send from any page.
+
+    ``jobs`` (a ``clm.train_jobs.TrainingJobs``) adds the ``/v1/train/*`` routes the
+    playground's Train view uses: upload and inspect a file, start a training job,
+    follow its progress, stop it.  Finished heads are served as new models.
     """
     app = FastAPI(title="CLM System One API", version="0.1.0")
     app.state.engine = engine
@@ -94,6 +100,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
             port = urlsplit(engine.embedder.url).port or 8090
             out["encoder"] = {"name": spec.name, "hf_id": spec.hf_id,
                               "serve": spec.vllm_command(port, getattr(engine.embedder, "max_tokens", None))}
+        out["training"] = jobs is not None
         if getattr(engine, "mock", False):      # tools/playground_mock.py: the UI warns about fake numbers
             out["mock"] = True
         return out
@@ -162,6 +169,51 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
         return JSONResponse({"model": body.get("model") or default_model(), "ranked": ranked},
                             headers={"X-CLM-Latency-Ms": f"{(time.perf_counter() - t0) * 1000:.1f}"})
 
+    if jobs is not None:
+        from .train_jobs import JobError
+
+        def job_call(fn, *a):
+            try:
+                return fn(*a)
+            except JobError as e:
+                raise HTTPException(422, str(e)) from e
+            except KeyError as e:
+                raise HTTPException(404, f"no training job {e.args[0]!r}") from e
+
+        @app.post("/v1/train/inspect")
+        async def train_inspect(request: Request, authorization: str | None = Header(default=None)):
+            """{filename, content_b64} -> columns, preview and suggested text / label columns."""
+            auth(authorization)
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(422, "body must be {filename, content_b64}")
+            return await asyncio.get_running_loop().run_in_executor(
+                None, job_call, jobs.inspect, body.get("filename") or "", body.get("content_b64") or "")
+
+        @app.get("/v1/train/jobs")
+        def train_jobs(authorization: str | None = Header(default=None)):
+            auth(authorization)
+            return {"jobs": jobs.list()}
+
+        @app.post("/v1/train/jobs")
+        async def train_start(request: Request, authorization: str | None = Header(default=None)):
+            """Start training: {upload_id, text_column, label_column, question, type, options, ...}."""
+            auth(authorization)
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(422, "body must be a JSON object")
+            return await asyncio.get_running_loop().run_in_executor(None, job_call, jobs.start, body)
+
+        @app.get("/v1/train/jobs/{job_id}")
+        def train_job(job_id: str, authorization: str | None = Header(default=None)):
+            auth(authorization)
+            return job_call(jobs.get, job_id)
+
+        @app.post("/v1/train/jobs/{job_id}/stop")
+        def train_stop(job_id: str, authorization: str | None = Header(default=None)):
+            auth(authorization)
+            return job_call(jobs.cancel, job_id)
+
     # mounted last: the routes above shadow it, everything else is the static UI
     if ui and os.path.isdir(STATIC_DIR):
         @app.get("/", include_in_schema=False)
@@ -176,7 +228,9 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--host", default=os.environ.get("CLM_HOST", "127.0.0.1"),
+                    help="interface to listen on (default 127.0.0.1; 0.0.0.0 exposes the API, uploads and "
+                         "training to the network, so set CLM_API_KEY too)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("CLM_PORT", 8700)))
     ap.add_argument("--emb-url", default=os.environ.get("CLM_EMB_URL", "http://127.0.0.1:8090/v1/embeddings"))
     ap.add_argument("--encoder", choices=sorted(ENCODERS), default=get_encoder().name,
@@ -199,6 +253,10 @@ def main() -> None:
                          "of the device (0.02, the default) or a size (512MiB); 0 disables it. "
                          "Environment: CLM_ACTION_CACHE")
     ap.add_argument("--no-ui", action="store_true", help="do not serve the playground at /")
+    ap.add_argument("--runs-dir", default=os.environ.get("CLM_RUNS_DIR",
+                                                          os.path.join(os.path.expanduser("~"), ".cache", "clm", "runs")),
+                    help="where models trained from the playground are kept (and served again after a restart)")
+    ap.add_argument("--no-train", action="store_true", help="turn off training from the playground")
     ap.add_argument("--cors", action="store_true",
                     help="allow browser requests from any origin (needed to drive this server from a "
                          "playground served elsewhere)")
@@ -208,10 +266,10 @@ def main() -> None:
     spec = get_encoder(args.encoder)
     ckpt = args.ckpt
     extra = {}
-    for spec in args.model:
-        name, _, path = spec.partition("=")
+    for item in args.model:
+        name, _, path = item.partition("=")
         if not path:
-            raise SystemExit(f"--model expects NAME=PATH, got {spec!r}")
+            raise SystemExit(f"--model expects NAME=PATH, got {item!r}")
         extra[name] = path
     device = args.device or default_device()
     try:
@@ -220,12 +278,19 @@ def main() -> None:
                         action_cache=args.action_cache)
     except IncompatibleEncoder as e:
         raise SystemExit(f"[clm] {e}") from e
+    jobs = None
+    if not args.no_train:
+        from .train_jobs import TrainingJobs
+        jobs = TrainingJobs(engine, args.runs_dir)
+        trained = [j["model"] for j in jobs.list() if j.get("served")]
+        print(f"[clm] training on; runs in {args.runs_dir}" + (f"; serving trained {trained}" if trained else ""),
+              flush=True)
     if not engine.heads:
         print(f"[clm] no head: serving clm-raw only (cosine in {spec.hf_id}'s own space, uncalibrated). "
-              f"Train a head with train/finetune.py --encoder {spec.name} and pass --ckpt for clm-latest.",
+              "Train one in the playground's Train view, or with clm-train, then serve it with --ckpt.",
               flush=True)
     api_key = os.environ.get("CLM_API_KEY")
-    app = create_app(engine, api_key, ui=not args.no_ui, cors=args.cors)
+    app = create_app(engine, api_key, ui=not args.no_ui, cors=args.cors, jobs=jobs)
     print(f"[clm] models {[m['name'] for m in engine.models()]} on {device}", flush=True)
     print(f"[clm] encoder {spec.name} = {spec.hf_id} ({spec.origin}); {spec.hidden_size}-d, {spec.pooling} pooling, "
           f"{engine.embedder.max_tokens}-token budget, truncation "

@@ -28,6 +28,11 @@
     <span class="brand-sub">System One playground</span>
   </div>
 
+  <nav id="viewswitch" class="viewswitch" aria-label="View" hidden>
+    <button type="button" class="vs-btn is-active" data-view="play" aria-pressed="true">Playground</button>
+    <button type="button" class="vs-btn" data-view="train" aria-pressed="false">Train a model</button>
+  </nav>
+
   <div class="topbar-right">
     <button id="status" class="status" type="button" title="Server status — click to refresh">
       <span class="dot"></span><span id="status-text">connecting…</span>
@@ -69,7 +74,7 @@
      --enable-prefix-caching --max-model-len 8192 --gpu-memory-utilization 0.35 --port 8090</pre>
 </div>
 
-<main class="layout">
+<main class="layout" id="play-view">
 
   <!-- ───────────────────────────── request ───────────────────────────── -->
   <section class="pane pane-req">
@@ -182,6 +187,71 @@
   </section>
 </main>
 
+<!-- ───────────────────────────── train view ───────────────────────────── -->
+<main id="train-view" class="train" hidden>
+  <div class="train-inner">
+    <header class="train-head">
+      <h1>Train a model on your own labels</h1>
+      <p>Give it examples you have already labelled. It learns to tell your labels apart in a few minutes,
+         then answers like any other model here. Your data stays on this server.</p>
+    </header>
+
+    <section class="step" id="t-step-1">
+      <div class="step-num" aria-hidden="true">1</div>
+      <div class="step-main">
+        <div class="step-title"><h2>Add labelled examples</h2><span class="step-done" id="t-done-1" hidden>Done</span></div>
+        <p class="step-sub">A file with one column of text and one column with the right label, such as a spreadsheet saved as CSV.</p>
+        <div id="t-pick">
+          <label id="t-drop" class="drop" for="t-file">
+            <input type="file" id="t-file" accept=".csv,.jsonl,.json,.parquet">
+            <span class="drop-main"><b>Drop a file here</b> or <u>choose one</u></span>
+            <span class="drop-sub">CSV, JSONL, JSON or Parquet, up to 50 MB</span>
+          </label>
+          <div class="or-row">
+            <button type="button" id="t-sample" class="btn-ghost">Try it with sample data</button>
+            <span class="hint">400 synthetic support conversations, 5 categories</span>
+          </div>
+        </div>
+        <div id="t-busy-1" class="busy" hidden><span class="spinner" aria-hidden="true"></span><span>Reading the file…</span></div>
+        <div id="t-err-1" class="t-err" role="alert" hidden></div>
+        <div id="t-data" hidden></div>
+      </div>
+    </section>
+
+    <section class="step is-locked" id="t-step-2">
+      <div class="step-num" aria-hidden="true">2</div>
+      <div class="step-main">
+        <div class="step-title"><h2>Describe what the labels mean</h2><span class="step-done" id="t-done-2" hidden>Done</span></div>
+        <p class="step-sub">The model reads these descriptions, not the label names. Describe each label with the words that show up in its examples.</p>
+        <div id="t-question"></div>
+      </div>
+    </section>
+
+    <section class="step is-locked" id="t-step-3">
+      <div class="step-num" aria-hidden="true">3</div>
+      <div class="step-main">
+        <div class="step-title"><h2>Train</h2></div>
+        <div id="t-train"></div>
+        <div id="t-progress" hidden></div>
+        <div id="t-err-3" class="t-err" role="alert" hidden></div>
+      </div>
+    </section>
+
+    <section class="step is-locked" id="t-step-4">
+      <div class="step-num" aria-hidden="true">4</div>
+      <div class="step-main">
+        <div class="step-title"><h2>See how well it works, and use it</h2></div>
+        <div id="t-results"></div>
+      </div>
+    </section>
+
+    <section class="models-list" id="t-models" hidden>
+      <h2>Your trained models</h2>
+      <div id="t-models-body"></div>
+    </section>
+  </div>
+</main>
+
 <div id="toast" class="toast" hidden></div>
 
 <template id="tpl-question">
@@ -208,5 +278,6 @@
 </template>
 
 <script src="app.js"></script>
+<script src="train.js"></script>
 </body>
 </html>

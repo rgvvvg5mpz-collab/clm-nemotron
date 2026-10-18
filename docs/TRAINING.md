@@ -1,5 +1,10 @@
 # Training CLM heads with `clm-train`
 
+**In the browser:** start `clm-serve`, open `http://localhost:8700/`, and choose **Train a
+model** in the top bar. It walks through the same steps with your file: pick columns,
+describe labels, train, read the results, try it. The model is served as soon as it
+finishes. The rest of this page is the command-line version.
+
 `clm-train` turns labelled examples into a head that `clm-serve` can serve. The
 Nemotron encoder stays frozen. Every text is embedded once, then only the two small
 projection heads (state and action) and the logit scale are trained. The illustrated

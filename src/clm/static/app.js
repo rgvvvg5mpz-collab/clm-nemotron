@@ -219,6 +219,7 @@ async function refreshStatus() {
   try {
     const r = await fetch(url('/health'), { headers: headers(false) });
     health = await r.json();
+    if (window.onHealth) window.onHealth(health);     // train.js: show the Train view when the server allows it
   } catch (e) {
     setStatus('bad', 'no server', `Could not reach ${baseUrl() || 'this origin'}/health — is clm-serve running?`);
     $('#mock-banner').hidden = true;

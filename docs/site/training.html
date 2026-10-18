@@ -90,6 +90,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
     <div class="eyebrow">CLM on Nemotron · clm-train</div>
     <h1>Train a classifier head on your own labels</h1>
     <p class="lede"><code>clm-train</code> turns a file of labelled examples into a head that <code>clm-serve</code> can serve. The Nemotron encoder stays frozen: every text is embedded once, then only the two small <span class="trained">projection heads</span> are trained. On a laptop, 400 labelled tickets take about 16 seconds.</p>
+    <p class="note">Prefer clicking? Open the playground that <code>clm-serve</code> serves at <code>http://localhost:8700/</code> and choose <b>Train a model</b>. It walks through the same steps with your file and serves the result as soon as it finishes. This page covers the command line, for scripts and CI.</p>
     <nav class="nav" aria-label="Pages"><a href="#data">Data formats</a><a href="#output">Reading the output</a><a href="#flags">All options</a><a href="#trouble">Errors</a><a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w">Classification guide</a><a href="https://claude.ai/artifact/4BPQENTTyiVFYRNsDamdgL">Architecture</a></nav>
   </header>
 

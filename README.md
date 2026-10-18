@@ -171,7 +171,24 @@ candidate set, and links are shareable.
   <sub>Upstream screenshot, captured with a head on a different encoder; Nemotron heads give different numbers.</sub>
 </p>
 
-Remote server? `ssh -L 8700:localhost:8700 <host>`. API only: `clm-serve --no-ui`.
+**Train a model** (the switch in the top bar) trains a classifier on your own labelled
+examples without leaving the browser:
+
+1. Drop in a CSV, JSONL, JSON or Parquet file, or try the bundled sample of 400 support
+   conversations. The text and label columns are picked for you.
+2. Describe what each label means. The model reads these descriptions, and the page flags
+   empty, very short, duplicate or catch-all ones as you type.
+3. Train, and watch progress live.
+4. See the result: accuracy on held-out examples next to the base model and the
+   always-the-most-common-label baseline. Try it on your own text, and open it in the
+   playground.
+
+The trained model is served at once under its own name and comes back after a restart.
+On a Mac with the 1B encoder, the sample trains in about 15 seconds and gets 93% of 100
+held-out conversations right, against 56% without training.
+
+Remote server? `ssh -L 8700:localhost:8700 <host>` (`clm-serve` listens on 127.0.0.1 by default).
+API only: `clm-serve --no-ui`.
 
 ---
 
@@ -209,6 +226,8 @@ fine-tuning, CLM reaches SOTA on both (**81.6%** and **87.6%**) while running
 
 ### Train a classifier: `clm-train`
 
+The quickest way is the playground's **Train a model** view (see [Playground](#playground)).
+The same training runs from the command line, which suits scripts and CI.
 `clm-train` turns labelled examples into a head for `clm-serve`. The encoder stays frozen;
 only the two projection heads are trained. With the encoder from the quickstart running:
 
@@ -507,7 +526,7 @@ files only; every API route above shadows it.
 clm-serve [--port 8700] [--encoder nemotron-3-embed-8b|nemotron-3-embed-1b]
           [--emb-url http://127.0.0.1:8090/v1/embeddings] [--emb-model NAME]
           [--max-tokens 8192] [--ckpt PATH] [--ckpt-dir DIR] [--model NAME=PATH ...] [--device cpu|cuda]
-          [--action-cache 0.02|512MiB|0] [--no-ui] [--cors]
+          [--action-cache 0.02|512MiB|0] [--host 127.0.0.1] [--runs-dir DIR] [--no-train] [--no-ui] [--cors]
 ```
 
 `--encoder` names the frozen encoder behind `--emb-url`. It sets the
@@ -521,6 +540,12 @@ The heads run on the GPU when torch sees one, else on the CPU; `--device` (or
 `Authorization: Bearer <key>` (the playground has a field for it). Environment
 equivalents: `CLM_ENCODER`, `CLM_PORT`, `CLM_EMB_URL`, `CLM_EMB_MODEL`, `CLM_EMB_MAX_TOKENS`, `CLM_CKPT`,
 `CLM_DEVICE`, `CLM_ACTION_CACHE`.
+
+`--runs-dir` (default `~/.cache/clm/runs`, or `CLM_RUNS_DIR`) is where models trained in the
+playground are kept. Each one is served again when `clm-serve` restarts, provided it was
+trained on the same encoder. `--no-train` turns the Train view and the `/v1/train/*` routes off.
+`--host` defaults to `127.0.0.1`. Pass `0.0.0.0` to expose the API, file uploads and training
+to the network, and then set `CLM_API_KEY`.
 
 `--no-ui` drops the playground and serves the API alone. `--cors` allows browser
 requests from any origin and is off by default, because an API key otherwise
