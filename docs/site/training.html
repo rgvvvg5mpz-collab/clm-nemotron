@@ -97,7 +97,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
   <div class="quick" aria-label="The three commands">
     <div><span class="label">1 · start the encoder</span><b>Leave it running</b>
 <pre># Mac
-python tools/local_embed_server.py \
+clm-encoder \
   --encoder nemotron-3-embed-1b
 # Linux + NVIDIA GPU
 scripts/serve_encoder_gpu.sh</pre></div>
@@ -124,7 +124,7 @@ scripts/serve_encoder_gpu.sh</pre></div>
         <table>
           <thead><tr><th><code>--encoder</code></th><th>Use it when</th><th>Start it with</th></tr></thead>
           <tbody>
-            <tr><td><code>nemotron-3-embed-1b</code></td><td>Laptops and quick iteration (2.3 GB, 2048-d)</td><td><code>python tools/local_embed_server.py --encoder nemotron-3-embed-1b</code></td></tr>
+            <tr><td><code>nemotron-3-embed-1b</code></td><td>Laptops and quick iteration (2.3 GB, 2048-d)</td><td><code>clm-encoder --encoder nemotron-3-embed-1b</code></td></tr>
             <tr><td><code>nemotron-3-embed-8b</code></td><td>Production on an NVIDIA GPU (15.9 GB, 4096-d); the default</td><td><code>scripts/serve_encoder_gpu.sh</code></td></tr>
           </tbody>
         </table>
@@ -330,7 +330,7 @@ r.answers["label"].probabilities   <span class="dim"># near 1.0: calibrate befor
         </tbody>
       </table>
     </div>
-    <p class="note">For agent trajectories (state → action pairs, best-of-N verification) use <code>python train/finetune.py --task clm --data traces.jsonl</code> and <code>evaluation/bon_eval.py</code>; see the README's fine-tuning section.</p>
+    <p class="note">For agent trajectories (state → action pairs, best-of-N verification) use <code>python research/finetune.py --task clm --data traces.jsonl</code> and <code>research/bon_eval.py</code>; see the README's fine-tuning section.</p>
   </section>
 
   <footer>Covers <code>clm-train</code> on branch <code>encoder-agnostic</code> of the CLM fork in <code>CLM-Piyush</code>. Numbers are from single runs on an Apple M5 Pro with Nemotron-3-Embed-1B.</footer>

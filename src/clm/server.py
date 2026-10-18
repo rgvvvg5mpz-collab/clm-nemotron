@@ -101,7 +101,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
             out["encoder"] = {"name": spec.name, "hf_id": spec.hf_id,
                               "serve": spec.vllm_command(port, getattr(engine.embedder, "max_tokens", None))}
         out["training"] = jobs is not None
-        if getattr(engine, "mock", False):      # tools/playground_mock.py: the UI warns about fake numbers
+        if getattr(engine, "mock", False):      # Claude Code/tools/playground_mock.py: the UI warns about fake numbers
             out["mock"] = True
         return out
 

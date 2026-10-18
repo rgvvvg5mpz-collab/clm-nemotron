@@ -1,21 +1,38 @@
-# CLM: the research behind it
+# Research
 
-This page keeps the upstream project's description of Contrastive Language Models: the
-method, the published results, the data recipe and the scaling laws. It is credited to the
-authors below.
+Background and research tooling. None of it is needed to run, train or serve CLM: the
+product lives in `src/clm/` and the user docs in `docs/`.
+
+| File | What it is |
+| --- | --- |
+| This page | Upstream's method, published results, data recipe and scaling laws |
+| [`finetune.py`](finetune.py) | Research trainer. `--task clm` trains on agent trajectories (state → action pairs); `--task choice` is the same trainer as `clm-train`. |
+| [`bon_eval.py`](bon_eval.py) | Best-of-N trajectory selection with a trained head |
+| [`hf_embeddings.py`](hf_embeddings.py) | Convert between embedding folders and Hugging Face datasets |
+| [`adapters.py`](adapters.py) | Reads agent-trace files for `finetune.py` |
+| [`examples/t_rex/`](examples/t_rex/README.md) | Upstream's real-time game benchmark against a hosted model |
+| [`AGENT_FINETUNING_LOOP.md`](AGENT_FINETUNING_LOOP.md) | Upstream's instructions for an AI agent running fine-tuning experiments in a loop |
+
+How to run the agent-trace pipeline: [`docs/TRAINING.md`](../docs/TRAINING.md), section
+"Agent trajectories".
+
+## The method and upstream results
+
+This part keeps the upstream project's description of Contrastive Language Models. It is
+credited to the authors below.
 
 > **Read the results with care.** Every number on this page was measured by the upstream
 > authors with their released head on a *different* encoder. This fork runs on NVIDIA
 > Nemotron, and its heads are trained from scratch, so these figures don't carry over.
-> Measurements of this fork are in the [user guide](USER_GUIDE.md), in
+> Measurements of this fork are in the [user guide](../docs/USER_GUIDE.md), in
 > [Model Governance](../Model%20Governance/README.md) and in [Marketing](../Marketing/README.md).
 
 Upstream: [github.com/Contrastive-LM/CLM](https://github.com/Contrastive-LM/CLM) ·
 [blog](https://contrastive-lm.notion.site) · Apache-2.0.
 
-## Results
+### Results
 
-### Zero-shot evaluation
+#### Zero-shot evaluation
 
 <p align="center">
   <img alt="Zero-shot latency and success rate, CLM-8B vs Jev, on T-Rex, BFCL v4 tool calling, WikiRacing and Super Mario" src="images/upstream/zero-shot.png" width=100%>
@@ -25,9 +42,9 @@ Across **computer-use, gaming and tool-calling tasks**, CLM-8B performs on par
 with Jev while running **up to 9× faster**. The speedups are largest when the
 number of candidate actions is large (WikiRacing) or when actions are reused
 across states (the T-Rex game). The T-Rex benchmark ships in this repo:
-see [examples/t_rex](../examples/t_rex/README.md).
+see [examples/t_rex](examples/t_rex/README.md).
 
-### Agentic benchmarks: CLM as a verifier
+#### Agentic benchmarks: CLM as a verifier
 
 <p align="center">
   <img alt="DeepSWE and Terminal-Bench 2.1: success rate and verifier latency, CLM vs Jev" src="images/upstream/agentic.png" width=100%>
@@ -41,9 +58,9 @@ a verifier for these long-horizon tasks, scoring below pass@1. With lightweight
 fine-tuning, CLM reaches SOTA on both (**81.6%** and **87.6%**) while running
 **4.1–5.7× faster than Jev**.
 
-## How it works
+### How it works
 
-### About
+#### About
 
 CLM first trains a **state encoder** and an **action encoder** on a
 large-scale dataset with a contrastive objective (InfoNCE), so that each state
@@ -78,7 +95,7 @@ client  ──►                          POST /v1/systemone · GET /v1/models 
           vLLM Nemotron-3-Embed-8B pooling server (GPU, :8090)   /v1/embeddings
 ```
 
-### Training Algorithm
+#### Training Algorithm
 
 CLM is trained with a bidirectional InfoNCE loss. Given a batch of $B$
 matched state–action pairs, we compute a $B \times B$ similarity matrix and,
@@ -97,7 +114,7 @@ state-to-action direction becomes
 L_{s \rightarrow a}^{\mathrm{hard}}=-\frac{1}{B}\sum_i\log\frac{\exp\left(s_i^\top a_i / \tau\right)}{\exp\left(s_i^\top a_i / \tau\right)+\sum_k\exp\left(s_i^\top h_{ik}^{(a)} / \tau\right)}.
 ```
 
-### Scaling Laws for Verification
+#### Scaling Laws for Verification
 
 The test InfoNCE loss $L$ scales as a power law with training compute $C$,
 dataset size $D$, projection-head size $N$ and encoder size
@@ -122,7 +139,7 @@ log-parameter space, and its minimum gives the optimal head size for that data
 budget. The optimum grows almost exactly linearly with the number of training
 tokens, $N^* \propto D^{1.02}$, at roughly **310 tokens per parameter**.
 
-### Data Recipe
+#### Data Recipe
 
 CLM is trained in three stages, each a progressively harder form of
 state–action alignment:
@@ -160,7 +177,7 @@ trained on the configured encoder, can be served with `--ckpt`. The format is a 
 `cfg["encoder"]` records that encoder, and `clm-serve` refuses a mismatch or a
 checkpoint that records none (upstream releases).
 
-## Upstream roadmap
+### Upstream roadmap
 
 1. **Scaling experiments:** larger backbones, and how far verification
    performance keeps scaling.
@@ -169,7 +186,7 @@ checkpoint that records none (upstream releases).
 3. **Scaling the data recipe:** more pre-training, hard-negative mining and
    agentic post-training.
 
-## Citation
+### Citation
 
 If you find CLM useful, please consider citing it:
 

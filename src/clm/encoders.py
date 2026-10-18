@@ -6,7 +6,7 @@ same spec drives both sides:
 
 * serving (``clm.embedder.Embedder``) turns a state or a candidate into the text
   sent to ``/v1/embeddings`` with ``spec.prepare(text, role, tokenizer)``, and
-* training (``train/embed_utils.Recipe``) turns the same text into token ids
+* training (``clm.embed_backends.Recipe``) turns the same text into token ids
   with the same call, so a head never sees inputs at serving time that differ
   from the ones it was trained on.
 
@@ -109,7 +109,7 @@ ENCODERS: dict[str, EncoderSpec] = {
         pooling="mean", state_prefix="query: ", action_prefix="passage: ", max_tokens=8192,
         origin="NVIDIA, built on Mistral AI's Ministral-3-8B; OpenMDW-1.1"),
     # Its 1B sibling (same prompts and pooling, 2048-d): small enough for a laptop
-    # (tools/local_embed_server.py).  Heads trained on one size do not transfer to the other.
+    # (clm-encoder).  Heads trained on one size do not transfer to the other.
     "nemotron-3-embed-1b": EncoderSpec(
         name="nemotron-3-embed-1b", hf_id="nvidia/Nemotron-3-Embed-1B-BF16", hidden_size=2048,
         pooling="mean", state_prefix="query: ", action_prefix="passage: ", max_tokens=8192,

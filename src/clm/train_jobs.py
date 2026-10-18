@@ -332,9 +332,10 @@ class TrainingJobs:
                                  "raw_per_question": res.get("raw_test_per_question"), "minutes": res["minutes"]}
                 job["checkpoint"] = os.path.join(out_dir, "best_head.pt")
                 job["checkpoint_display"] = _display_path(job["checkpoint"])
+            self._serve(job)                       # load it first, so "done" always means "answering"
+            with self._lock:
                 job["status"] = "done"
                 job["progress"] = {"stage": "done"}
-            self._serve(job)
         except Cancelled:
             with self._lock:
                 job.update(status="stopped", progress={"stage": "stopped"})

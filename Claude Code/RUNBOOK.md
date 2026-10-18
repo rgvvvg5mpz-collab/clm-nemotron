@@ -18,7 +18,7 @@ What it does, in order. Each step is skipped when already done:
 2. **No models?** It runs `fetch-models.sh`. That downloads release `models-v1` from this
    repo's GitHub origin with `gh` (or `GITHUB_TOKEN`), verifies `SHA256SUMS` and unpacks
    to `models/`. About 2.4 GB.
-3. It starts `tools/local_embed_server.py --encoder nemotron-3-embed-1b` on :8090,
+3. It starts `clm-encoder --encoder nemotron-3-embed-1b` on :8090,
    loading from `models/encoders/nemotron-3-embed-1b`. `HF_HUB_OFFLINE=1` is set, so
    there is no network access. It picks the device itself: CUDA, then Apple MPS, then CPU.
 4. It starts `clm-serve` on :8700 with `--ckpt-dir models/heads` (the shipped models) and

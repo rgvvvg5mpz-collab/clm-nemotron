@@ -3,11 +3,11 @@
 
 vLLM needs Linux and an NVIDIA GPU.  This serves a ``clm.encoders`` encoder with
 sentence-transformers on Apple silicon (MPS) or the CPU, behind the same two
-routes ``clm-serve`` and ``train/finetune.py --embed-url`` use, so either can
+routes ``clm-serve`` and ``research/finetune.py --embed-url`` use, so either can
 point at it unchanged:
 
     pip install -e ".[mac]"
-    python tools/local_embed_server.py --encoder nemotron-3-embed-1b      # :8090
+    clm-encoder --encoder nemotron-3-embed-1b      # :8090
     clm-serve --encoder nemotron-3-embed-1b
 
 It behaves like vLLM where the callers depend on it:
@@ -28,8 +28,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-import os
-import sys
 import threading
 import time
 from typing import Any
@@ -37,8 +35,7 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-from clm.encoders import ENCODERS, get_encoder  # noqa: E402
+from .encoders import ENCODERS, get_encoder
 
 
 class LocalEncoder:
@@ -142,7 +139,7 @@ def pick_device(want: str) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="clm-encoder", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--encoder", choices=sorted(ENCODERS), default="nemotron-3-embed-1b",
                     help="clm.encoders profile to serve (default: the 1B, which fits a laptop)")
     ap.add_argument("--port", type=int, default=8090)

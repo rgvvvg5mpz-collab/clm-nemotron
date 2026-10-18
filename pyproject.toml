@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 # What clm-serve and clm-train need.  The encoder runs separately: vLLM on a Linux GPU
-# ([gpu] extra) or tools/local_embed_server.py on a Mac or CPU ([mac] extra).
+# ([gpu] extra) or clm-encoder on a Mac or CPU ([mac] extra).
 dependencies = [
     "numpy>=1.24",
     "requests>=2.28",
@@ -38,17 +38,19 @@ dependencies = [
 [project.optional-dependencies]
 # the 8B encoder behind vLLM (Linux + NVIDIA GPU): scripts/serve_encoder_gpu.sh
 gpu = ["vllm>=0.6"]
-# tools/local_embed_server.py: the encoder on Apple silicon (MPS) or CPU
+# clm-encoder: the encoder on Apple silicon (MPS), CUDA or CPU, without vLLM
 mac = ["sentence-transformers>=5.4.1"]
 # tests/ (no GPU, no network)
 test = ["pytest>=8", "httpx>=0.25", "pyflakes>=3"]
-# examples/t_rex: persistent HTTP client for the real-time player
+# research/examples/t_rex: persistent HTTP client for the real-time player
 examples = ["httpx>=0.25"]
 
 [project.scripts]
 clm-serve = "clm.server:main"
 clm-train = "clm.train_cli:main"
 clm-download = "clm.heads:download_main"
+clm-encoder = "clm.local_encoder:main"
+clm-benchmark = "clm.benchmark:main"
 
 [project.urls]
 Homepage = "https://github.com/rgvvvg5mpz-collab/clm-nemotron"

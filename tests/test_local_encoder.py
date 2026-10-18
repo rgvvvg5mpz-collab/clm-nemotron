@@ -1,29 +1,20 @@
-"""tools/local_embed_server.py against a fake model."""
+"""clm-encoder (clm.local_encoder) against a fake model."""
 from __future__ import annotations
 
 import base64
 import dataclasses
-import os
-import subprocess
-import sys
 
 import numpy as np
-import pytest
 import torch
 
-from helpers import (NEMO, OTHER, REPO, CharTokenizer, FakeSession, fake_embedder, save_head)  # noqa: F401
-from clm.embedder import Embedder, EmbedderError  # noqa: F401
-from clm.encoders import (ENCODERS, IncompatibleEncoder, check_compatible, checkpoint_encoder,  # noqa: F401
-                          get_encoder)
-from clm.engine import Engine  # noqa: F401
-from clm.heads import HeadPair, make_head  # noqa: F401
+from clm.embedder import Embedder
+from clm.encoders import ENCODERS
 
 
-# ----------------------------------------------------------------------------- tools/local_embed_server.py
-def test_local_embed_server_speaks_the_vllm_subset():
+# ----------------------------------------------------------------------------- clm-encoder
+def test_local_encoder_speaks_the_vllm_subset():
     from fastapi.testclient import TestClient
-    sys.path.insert(0, os.path.join(REPO, "tools"))
-    import local_embed_server as les
+    from clm import local_encoder as les
 
     class FakeST(torch.nn.Module):    # mean of per-token vectors, like the real pooling
         def forward(self, f):

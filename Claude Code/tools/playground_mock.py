@@ -9,8 +9,8 @@ server reports ``{"mock": true}`` on ``/health`` and the page shows a warning
 banner so nobody mistakes a screenshot of this for a result.
 
     pip install fastapi uvicorn numpy
-    python tools/playground_mock.py --port 8700        # then open http://localhost:8700/
-    python tools/playground_mock.py --broken           # pretend the encoder is down (502s)
+    python "Claude Code/tools/playground_mock.py" --port 8700        # then open http://localhost:8700/
+    python "Claude Code/tools/playground_mock.py" --broken           # pretend the encoder is down (502s)
 
 For real answers, serve the encoder and run ``clm-serve`` — see the README.
 """
@@ -22,7 +22,7 @@ import math
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
 from clm.embedder import EmbedderError              # noqa: E402
 from clm.encoders import get_encoder               # noqa: E402

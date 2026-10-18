@@ -4,7 +4,7 @@
 
 | Component | Code | Runs as | Purpose |
 | --- | --- | --- | --- |
-| Encoder server | `tools/local_embed_server.py` (default), or vLLM via `Claude Code/scripts/serve-encoder-gpu.sh` | Process on port 8090, `127.0.0.1` only | Turns text into L2-normalised vectors with the frozen Nemotron encoder. Nothing else. |
+| Encoder server | `clm-encoder` (`src/clm/local_encoder.py`) (default), or vLLM via `Claude Code/scripts/serve-encoder-gpu.sh` | Process on port 8090, `127.0.0.1` only | Turns text into L2-normalised vectors with the frozen Nemotron encoder. Nothing else. |
 | CLM service | `src/clm/server.py` (`clm-serve`) | Process on port 8700, `127.0.0.1` by default | HTTP API, playground UI, head inference, training jobs |
 | Engine | `src/clm/engine.py`, `heads.py`, `cache.py`, `embedder.py`, `schema.py` | Inside `clm-serve` | Builds the texts, gets vectors, applies the heads, returns probabilities |
 | Encoder profiles | `src/clm/encoders.py` | Library | One definition of each encoder (id, width, prompts, truncation) shared by training and serving; the compatibility check |
@@ -58,7 +58,7 @@ serving vectors are produced by the same code path.
 
 | Boundary | Control | Where |
 | --- | --- | --- |
-| Network exposure | Both services bind to `127.0.0.1` by default. Exposing `clm-serve` needs `--host 0.0.0.0` and should be paired with `CLM_API_KEY`. | `server.py`, `local_embed_server.py` |
+| Network exposure | Both services bind to `127.0.0.1` by default. Exposing `clm-serve` needs `--host 0.0.0.0` and should be paired with `CLM_API_KEY`. | `server.py`, `local_encoder.py` |
 | Authentication | Optional bearer token (`CLM_API_KEY`) on all API and training routes. No user accounts. | `server.py` |
 | Cross-origin use | CORS off by default (`--cors` to enable) | `server.py` |
 | Uploads | Training uploads limited to 50 MB and to `.csv/.jsonl/.json/.parquet`. They are parsed as data only (no pickle) and stored under `--runs-dir/uploads/`. Upload ids are validated (no path traversal). | `train_jobs.py` |

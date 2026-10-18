@@ -11,7 +11,7 @@ import torch
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "train"))
+sys.path.insert(0, os.path.join(REPO, "research"))
 
 from clm.embedder import Embedder  # noqa: E402
 from clm.encoders import ENCODERS  # noqa: E402

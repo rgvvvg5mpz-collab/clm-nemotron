@@ -5,7 +5,7 @@ Tasks (``--task``)
   clm     (state, action) step traces from DeepSWE or custom data;
           one shared in-batch group-masked InfoNCE trainer.
           ``--holdout-folds`` trains one head per fold and writes fold_spec.json
-          for evaluation/bon_eval.py. ``--folds K --fold-index INDEX`` creates
+          for research/bon_eval.py. ``--folds K --fold-index INDEX`` creates
           task-disjoint folds stratified by candidate/pass count before training.
   choice  typed System One questions (LocalLLaMA/typed-decisions), candidates built by
           clm.schema.build_pairs. ``--loss infonce`` (default): bidirectional in-batch InfoNCE
@@ -49,10 +49,9 @@ import torch.nn.functional as F
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "preprocessing"))
 sys.path.insert(0, HERE)
 import adapters  # noqa: E402
-import embed_utils  # noqa: E402
+from clm import embed_backends as embed_utils  # noqa: E402
 import hf_embeddings  # noqa: E402
 from clm.encoders import ENCODERS, check_compatible, checkpoint_encoder, get_encoder  # noqa: E402
 from clm.heads import make_head  # noqa: E402

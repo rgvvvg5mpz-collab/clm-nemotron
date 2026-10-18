@@ -14,10 +14,10 @@ build/
 *.egg-info/
 .venv*/
 logs/*.log
-# examples/t_rex/: answer caches, per-decision logs (results/*.json are committed)
-examples/t_rex/data/
-examples/t_rex/cache/
-examples/t_rex/artifacts/
+# research/examples/t_rex/: answer caches, per-decision logs (results/*.json are committed)
+research/examples/t_rex/data/
+research/examples/t_rex/cache/
+research/examples/t_rex/artifacts/
 # Local state: downloaded models, release builds, training runs, logs, pid files
 models/
 dist/

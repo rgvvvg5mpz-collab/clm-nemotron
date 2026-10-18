@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Chrome T-Rex runner, 60 seconds per seed: does the model keep the dinosaur alive?
 
-    python examples/t_rex/run.py --model clm                 # 5 seeds x 60 s, real time, shield on
-    python examples/t_rex/run.py --model jev
-    python examples/t_rex/run.py --model clm --no-shield     # the model's answer stands even when labelled unsafe
-    python examples/t_rex/run.py --model clm --lockstep 6    # game waits for every answer (latency removed)
+    python research/examples/t_rex/run.py --model clm                 # 5 seeds x 60 s, real time, shield on
+    python research/examples/t_rex/run.py --model jev
+    python research/examples/t_rex/run.py --model clm --no-shield     # the model's answer stands even when labelled unsafe
+    python research/examples/t_rex/run.py --model clm --lockstep 6    # game waits for every answer (latency removed)
 
 A deterministic physics planner labels each action (jump / duck / run) safe or unsafe for the
 moment the model's answer will land, and the model reads those labels in a Choice:

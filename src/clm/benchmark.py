@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure a running clm-serve: accuracy, latency and throughput on labelled test rows.
 
-    python evaluation/benchmark_service.py --model support-topic-1b \\
+    clm-benchmark --model support-topic-1b \\
         --data src/clm/static/sample/support-tickets.csv --questions models/heads/support-topic-1b.json \\
         --out "Marketing/benchmark/results.json"
 
@@ -54,7 +54,7 @@ def machine():
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="clm-benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", default="http://127.0.0.1:8700")
     ap.add_argument("--model", required=True)
     ap.add_argument("--data", required=True, help="CSV with text, label and optional split columns")

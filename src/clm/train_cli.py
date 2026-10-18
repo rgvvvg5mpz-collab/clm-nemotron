@@ -1,7 +1,7 @@
 """``clm-train``: train CLM heads for your own classification problem.
 
 The frozen encoder must be running (``vllm serve`` on a GPU box, or
-``tools/local_embed_server.py`` on a Mac).  Two ways to give it data:
+``clm-encoder` (`src/clm/local_encoder.py`)` on a Mac).  Two ways to give it data:
 
 One question for every row: a CSV / JSONL / JSON / parquet file of ``text`` and
 ``label`` columns, plus the question and its options:
@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> None:
         with open(os.path.join(args.out, "questions.json"), "w", encoding="utf-8") as f:
             json.dump({args.qid: question}, f, indent=1)
 
-    # the options train_choice shares with train/finetune.py --task choice
+    # the options train_choice shares with research/finetune.py --task choice
     cfg = argparse.Namespace(
         data=args.data, workflow=args.workflow if question is None else None, out_dir=args.out,
         encoder=spec.name, embed_url=None if args.offline else args.embed_url, embed_model=None,

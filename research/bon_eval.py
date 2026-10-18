@@ -22,7 +22,7 @@ import torch.nn.functional as F
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "preprocessing"))
+sys.path.insert(0, HERE)
 import hf_embeddings  # noqa: E402
 from clm.encoders import check_compatible, checkpoint_encoder  # noqa: E402
 from clm.heads import HIDDEN, make_head  # noqa: E402  (released checkpoint architecture)

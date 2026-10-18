@@ -198,7 +198,7 @@ What is this customer conversation primarily about?</span>
   <section id="parity">
     <div class="prose">
       <h2>Training and serving share one input path</h2>
-      <p>A head only works on vectors built exactly the way it was trained on. So <code>train/finetune.py</code> and <code>clm-serve</code> go through the same code: <code>schema.build_pairs</code> lays out the texts, and <code>EncoderSpec.prepare</code> adds the prompt and truncates. Every checkpoint is stamped with the encoder it was trained on, and that stamp is checked when it loads.</p>
+      <p>A head only works on vectors built exactly the way it was trained on. So <code>research/finetune.py</code> and <code>clm-serve</code> go through the same code: <code>schema.build_pairs</code> lays out the texts, and <code>EncoderSpec.prepare</code> adds the prompt and truncates. Every checkpoint is stamped with the encoder it was trained on, and that stamp is checked when it loads.</p>
     </div>
     <figure>
       <div class="fig-frame">
@@ -273,13 +273,13 @@ What is this customer conversation primarily about?</span>
           <tr><td><code>src/clm/engine.py</code></td><td>In-process engine: <code>answer()</code>, <code>rank()</code>, the model list, the default model (<code>clm-latest</code>, else <code>clm-raw</code>).</td></tr>
           <tr><td><code>src/clm/cache.py</code></td><td>A fixed device-memory arena for projected vectors, keyed by head generation.</td></tr>
           <tr><td><code>src/clm/server.py</code></td><td>FastAPI app <code>clm-serve</code>: <code>/v1/systemone</code>, <code>/v1/rank</code>, <code>/v1/models</code>, <code>/health</code>, and the playground.</td></tr>
-          <tr><td><code>tools/local_embed_server.py</code></td><td><code>/v1/embeddings</code> on Apple silicon or CPU via sentence-transformers. It behaves like vLLM where callers depend on it.</td></tr>
+          <tr><td><code>clm-encoder</code></td><td><code>/v1/embeddings</code> on Apple silicon or CPU via sentence-transformers. It behaves like vLLM where callers depend on it.</td></tr>
           <tr><td><code>src/clm/train_cli.py</code></td><td><code>clm-train</code>: trains a head from <code>text,label</code> rows or typed rows, holds out test and validation by group, and prints the serve command (<a href="https://claude.ai/artifact/JjFHh3mKhCvx8XgciVy47F">training page</a>).</td></tr>
           <tr><td><code>src/clm/trainer.py</code></td><td>The training loop shared by <code>clm-train</code> and <code>finetune.py --task choice</code>: embeds once into a cache, trains the heads, keeps the best epoch, scores it next to <code>clm-raw</code> and the majority label.</td></tr>
           <tr><td><code>src/clm/typed_data.py</code></td><td>Reads CSV, JSONL, JSON and parquet rows, converts <code>text,label</code> into typed rows, and splits by group.</td></tr>
           <tr><td><code>src/clm/embed_backends.py</code></td><td>Training-side embedding: the same <code>prepare()</code> as serving, sent to the encoder server or to in-process vLLM.</td></tr>
-          <tr><td><code>train/finetune.py</code></td><td>Research trainer: agent traces (<code>--task clm</code>), and typed questions through the shared loop. Stamps the encoder into every checkpoint.</td></tr>
-          <tr><td><code>evaluation/bon_eval.py</code></td><td>Best-of-N trajectory selection with a trained head.</td></tr>
+          <tr><td><code>research/finetune.py</code></td><td>Research trainer: agent traces (<code>--task clm</code>), and typed questions through the shared loop. Stamps the encoder into every checkpoint.</td></tr>
+          <tr><td><code>research/bon_eval.py</code></td><td>Best-of-N trajectory selection with a trained head.</td></tr>
         </tbody>
       </table>
     </div>
@@ -295,7 +295,7 @@ What is this customer conversation primarily about?</span>
         <thead><tr><th>Profile</th><th>Hub id</th><th>Width</th><th>Weights</th><th>Runs on</th></tr></thead>
         <tbody>
           <tr><td><code>nemotron-3-embed-8b</code> (default)</td><td><code>nvidia/Nemotron-3-Embed-8B-BF16</code></td><td>4096</td><td>15.9 GB</td><td>vLLM on a Linux NVIDIA GPU; loads locally on 32 GB+ Macs</td></tr>
-          <tr><td><code>nemotron-3-embed-1b</code></td><td><code>nvidia/Nemotron-3-Embed-1B-BF16</code></td><td>2048</td><td>2.3 GB</td><td>Laptops: <code>tools/local_embed_server.py</code>, about 8.5k tokens/s on an M5 Pro</td></tr>
+          <tr><td><code>nemotron-3-embed-1b</code></td><td><code>nvidia/Nemotron-3-Embed-1B-BF16</code></td><td>2048</td><td>2.3 GB</td><td>Laptops: <code>clm-encoder</code>, about 8.5k tokens/s on an M5 Pro</td></tr>
         </tbody>
       </table>
     </div>

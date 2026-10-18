@@ -45,10 +45,14 @@ If a step fails, read `Claude Code/RUNBOOK.md` → "Troubleshooting" and the log
 
 ## Where things are
 
-- `src/clm/`: the package. `server.py` is `clm-serve`, `train_cli.py` is `clm-train`,
+- `src/clm/`: the product. `server.py` is `clm-serve`, `train_cli.py` is `clm-train`,
   `train_jobs.py` handles training from the playground, `encoders.py` holds the encoder
   profiles, and `static/` is the playground.
-- `tools/local_embed_server.py`: the encoder server used on Macs and CPUs (and by default everywhere).
-- `docs/`: `USER_GUIDE.md` (step by step), `TRAINING.md`, `API.md`, `RESEARCH.md` (upstream claims).
+- `clm-encoder` (`src/clm/local_encoder.py`): the encoder server used on Macs and CPUs (and by default everywhere).
+- `Claude Code/scripts/` (operations) and `Claude Code/tools/` (builders for the videos, deck,
+  guide screenshots and the frontier comparison).
+- `docs/`: `USER_GUIDE.md` (step by step), `TRAINING.md`, `API.md`, `site/` (HTML pages).
+- `research/`: upstream's method and results, agent-trace training (`finetune.py`),
+  best-of-N evaluation, the T-Rex demo. Not needed to run the product.
 - `Model Governance/`: architecture, model cards, data lineage, evaluation, risks.
 - `Crew Training/`, `Marketing/`: training video and materials, executive deck and video.

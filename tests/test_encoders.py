@@ -1,22 +1,15 @@
 """Encoder profiles, prompts, truncation and the embedder."""
 from __future__ import annotations
 
-import base64
-import dataclasses
 import os
 import subprocess
-import sys
 
 import numpy as np
 import pytest
-import torch
 
-from helpers import (NEMO, OTHER, REPO, CharTokenizer, FakeSession, fake_embedder, save_head)  # noqa: F401
-from clm.embedder import Embedder, EmbedderError  # noqa: F401
-from clm.encoders import (ENCODERS, IncompatibleEncoder, check_compatible, checkpoint_encoder,  # noqa: F401
-                          get_encoder)
-from clm.engine import Engine  # noqa: F401
-from clm.heads import HeadPair, make_head  # noqa: F401
+from helpers import NEMO, OTHER, REPO, CharTokenizer, fake_embedder
+from clm.embedder import EmbedderError
+from clm.encoders import ENCODERS, IncompatibleEncoder, check_compatible, checkpoint_encoder, get_encoder
 
 
 # ----------------------------------------------------------------------------- profiles

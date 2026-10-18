@@ -3,7 +3,7 @@
 # Installs and downloads on first run. Logs: logs/encoder.log, logs/clm-serve.log.
 source "$(dirname "$0")/common.sh"
 
-[ -x "$PY" ] || bash "$HERE/setup.sh"
+[ -x "$VENV/bin/clm-encoder" ] || bash "$HERE/setup.sh"
 [ -f "$MODELS_DIR/.complete-$MODELS_TAG" ] || [ -f "$MODELS_DIR/encoders/$ENCODER/config.json" ] || bash "$HERE/fetch-models.sh"
 
 # 1. encoder
@@ -13,7 +13,7 @@ else
   port_busy "$ENC_PORT" && die "port $ENC_PORT is in use by another program; stop it or set CLM_ENC_PORT"
   if [ -f "$MODELS_DIR/encoders/$ENCODER/config.json" ]; then export HF_HUB_OFFLINE=1; fi
   say "starting the $ENCODER encoder on :$ENC_PORT ($(os_kind))"
-  nohup "$PY" "$REPO/tools/local_embed_server.py" --encoder "$ENCODER" --port "$ENC_PORT" \
+  nohup "$VENV/bin/clm-encoder" --encoder "$ENCODER" --port "$ENC_PORT" \
     > "$LOGS/encoder.log" 2>&1 &
   echo $! > "$RUN/encoder.pid"
 fi

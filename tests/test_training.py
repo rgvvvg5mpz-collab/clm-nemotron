@@ -1,8 +1,6 @@
-"""Training heads: finetune.py, the shared trainer and clm-train."""
+"""Training heads: research/finetune.py, the shared trainer and clm-train."""
 from __future__ import annotations
 
-import base64
-import dataclasses
 import os
 import subprocess
 import sys
@@ -11,18 +9,14 @@ import numpy as np
 import pytest
 import torch
 
-from helpers import (NEMO, OTHER, REPO, CharTokenizer, FakeSession, fake_embedder, save_head)  # noqa: F401
-from clm.embedder import Embedder, EmbedderError  # noqa: F401
-from clm.encoders import (ENCODERS, IncompatibleEncoder, check_compatible, checkpoint_encoder,  # noqa: F401
-                          get_encoder)
-from clm.engine import Engine  # noqa: F401
-from clm.heads import HeadPair, make_head  # noqa: F401
+from helpers import NEMO, REPO, CharTokenizer
+from clm.heads import HeadPair
 
 
 # ----------------------------------------------------------------------------- training
 def test_recipe_matches_serving_text():
-    import embed_utils
-    r = embed_utils.Recipe.__new__(embed_utils.Recipe)
+    from clm.embed_backends import Recipe
+    r = Recipe.__new__(Recipe)
     r.spec, r.tok, r.max_len = NEMO, CharTokenizer(), 40
     msgs = [{"role": "user", "content": "fix the bug"}, {"role": "assistant", "content": "ok"}]
     ids = r.ids(msgs, "state")
@@ -34,7 +28,7 @@ def test_recipe_matches_serving_text():
 
 def test_finetune_needs_a_data_source(tmp_path):
     env = {**os.environ, "CLM_ENCODER": ""}
-    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "clm",
+    p = subprocess.run([sys.executable, os.path.join(REPO, "research", "finetune.py"), "--task", "clm",
                         "--out-dir", str(tmp_path)], capture_output=True, text=True, env=env)
     assert p.returncode != 0 and "clm needs exactly one of --data" in p.stderr
 
@@ -47,7 +41,7 @@ def test_finetune_refuses_upstream_embedding_dir(tmp_path):
     torch.save(torch.zeros(4, 4096, dtype=torch.float16), emb / "action_embeddings.pt")
     samples = [{"task_id": f"t{i % 2}", "step_idx": i, "trajectory_id": str(i), "reward": 1} for i in range(4)]
     json.dump({"num_samples": 4, "hidden_size": 4096, "samples": samples}, open(emb / "metadata.json", "w"))
-    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "clm",
+    p = subprocess.run([sys.executable, os.path.join(REPO, "research", "finetune.py"), "--task", "clm",
                         "--emb-dir", str(emb), "--out-dir", str(tmp_path / "out"), "--batch", "2",
                         "--epochs", "1"], capture_output=True, text=True)
     assert p.returncode != 0 and "records no encoder" in p.stderr
@@ -61,7 +55,7 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
 
     import pyarrow as pa
     import pyarrow.parquet as pq
-    import adapters
+    from clm import typed_data as adapters
 
     rng = np.random.default_rng(0)
     rows = []
@@ -88,7 +82,7 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
              vecs=rng.standard_normal((len(keys), 4096)).astype(np.float16))
 
     out = tmp_path / "run"
-    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "choice",
+    p = subprocess.run([sys.executable, os.path.join(REPO, "research", "finetune.py"), "--task", "choice",
                         "--data", str(data), "--embed-cache", str(cache_dir), "--out-dir", str(out),
                         "--epochs", "2", "--batch", "8", "--width", "32", "--depth", "2", "--gpu", "0"],
                        capture_output=True, text=True, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""})
@@ -103,7 +97,7 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
     # a file without a split column must not double as its own test set
     nosplit = tmp_path / "nosplit.parquet"
     pq.write_table(pa.Table.from_pylist([{k: v for k, v in r.items() if k != "split"} for r in rows]), nosplit)
-    p = subprocess.run([sys.executable, os.path.join(REPO, "train", "finetune.py"), "--task", "choice",
+    p = subprocess.run([sys.executable, os.path.join(REPO, "research", "finetune.py"), "--task", "choice",
                         "--data", str(nosplit), "--embed-cache", str(cache_dir), "--out-dir", str(tmp_path / "x")],
                        capture_output=True, text=True)
     assert p.returncode != 0 and "no 'split' column" in p.stderr

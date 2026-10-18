@@ -1,4 +1,4 @@
-"""Data adapters for ``train/finetune.py``.
+"""Data adapters for ``research/finetune.py``.
 
 * ``read_transitions``: step transitions (``state`` chat messages, ``action``,
   ``task_id``, ``step_idx``, ``trajectory_id``, ``reward``) as written by
@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 from clm.typed_data import ChoiceExample, typed_decision_examples  # noqa: E402,F401
 
+__all__ = ["read_transitions", "ChoiceExample", "typed_decision_examples"]
 TRANSITION_KEYS = ("state", "action", "task_id", "step_idx")
 
 

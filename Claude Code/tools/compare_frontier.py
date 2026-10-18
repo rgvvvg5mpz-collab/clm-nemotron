@@ -6,13 +6,13 @@ It sends the 100 synthetic test conversations of src/clm/static/sample/support-t
 to the API, so it costs money: a few cents with Haiku, about a dollar with Opus.
 
     pip install anthropic
-    python "Marketing/benchmark/compare_frontier.py" --models claude-haiku-5-5 claude-sonnet-5-5 claude-opus-5-5
+    python "Claude Code/tools/compare_frontier.py" --models claude-haiku-5-5 claude-sonnet-5-5 claude-opus-5-5
 
 Each request asks the same question with the same label descriptions the CLM model was
 trained with, and constrains the answer to one label with structured output. Effort is
 "low", the usual setting for classification. Opus 5.5 and Sonnet 5.5 requests opt into
 the API's server-side refusal fallback; a refusal that still ends the chain counts as
-wrong. Results go to Marketing/benchmark/frontier-results.json, which build_deck.py reads.
+wrong. Results go to Marketing/benchmark/frontier-results.json, which build_marketing.py reads.
 """
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ import os
 import statistics
 import time
 
-import anthropic
 
 # USD per million tokens, Anthropic first-party list prices (cached 2026-10-06).
 PRICES = {
@@ -67,11 +66,13 @@ def main():
     ap.add_argument("--models", nargs="+", default=["claude-opus-5-5"], choices=sorted(PRICES))
     ap.add_argument("--data", default=os.path.join(REPO, "src/clm/static/sample/support-tickets.csv"))
     ap.add_argument("--card", default=os.path.join(REPO, "models/heads/support-topic-1b.json"))
-    ap.add_argument("--out", default=os.path.join(HERE, "frontier-results.json"))
+    ap.add_argument("--out", default=os.path.join(REPO, "Marketing", "benchmark", "frontier-results.json"))
     a = ap.parse_args()
 
     question = json.load(open(a.card))["questions"]["label"]
     rows = [r for r in csv.DictReader(open(a.data, encoding="utf-8")) if r.get("split") == "test"]
+    import anthropic  # optional dependency: pip install anthropic
+
     client = anthropic.Anthropic()
     results = {}
     for model in a.models:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record the Crew Training video against a running CLM (start it first with start.sh).
 
-    .venv/bin/python "Crew Training/production/make_training_video.py"
+    .venv/bin/python "Claude Code/tools/make_training_video.py"
 
 Writes "Crew Training/CLM-Crew-Training.mp4" (1280x800, H.264, AAC, English subtitles) and
 "Crew Training/CLM-Crew-Training.srt". Everything on screen is the real application; the
@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import studio  # noqa: E402
 
-OUT_DIR = os.path.dirname(HERE)
+OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(HERE)), "Crew Training")
 BASE = os.environ.get("CLM_URL", "http://127.0.0.1:8700")
 MODEL_NAME = os.environ.get("VIDEO_MODEL_NAME", "ticket-topic")
 

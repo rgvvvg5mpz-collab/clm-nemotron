@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the executive briefing: slides (PNG, PDF), an editable PowerPoint, and a ~3-minute video.
 
-    .venv/bin/python Marketing/production/build_marketing.py
+    .venv/bin/python "Claude Code/tools/build_marketing.py"
 
-Inputs: Marketing/benchmark/results.json (CLM measured by evaluation/benchmark_service.py)
-and, when present, Marketing/benchmark/frontier-results.json (from compare_frontier.py).
+Inputs: Marketing/benchmark/results.json (CLM measured by `clm-benchmark`)
+and, when present, Marketing/benchmark/frontier-results.json (from Claude Code/tools/compare_frontier.py).
 Frontier accuracy and latency appear only if that second file exists; costs otherwise come
 from list prices with the token assumptions printed on the slide. Needs Playwright (slide
 rendering), python-pptx, macOS `say` and ffmpeg.
@@ -21,9 +21,9 @@ import tempfile
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MKT = os.path.dirname(HERE)
-REPO = os.path.dirname(MKT)
-sys.path.insert(0, os.path.join(REPO, "Crew Training", "production"))
+REPO = os.path.dirname(os.path.dirname(HERE))
+MKT = os.path.join(REPO, "Marketing")
+sys.path.insert(0, HERE)
 import studio  # noqa: E402
 
 # ----------------------------------------------------------------------------- numbers
@@ -74,7 +74,7 @@ SLIDES = [
      "bar_max": 100, "unit": "%",
      "foot": f"Support-ticket topics, 5 labels, 100 held-out conversations; {ACC_LO}–{ACC_HI}% across 9 training runs "
              f"(mean {ACC_MEAN}%). Demo data: synthetic, labelled by a model. Frontier accuracy: measure on our data "
-             "with Marketing/benchmark/compare_frontier.py.",
+             "with Claude Code/tools/compare_frontier.py.",
      "notes": 'On a ticket-routing demo, a model trained on three hundred examples gets eighty-eight to ninety-six percent of unseen tickets right. Untrained, the same reader manages fifty-seven percent. The demo data is synthetic, so the real test is our own data, against a frontier model, with the included script.'},
     {"key": "speed", "kicker": "Speed (measured)",
      "big": f"{P50} ms", "big_sub": f"median answer, {P95} ms at the 95th percentile, on one laptop",

@@ -10,8 +10,8 @@ high-volume classification (cost, accuracy, latency, control), and where it does
 | [`CLM-Executive-Briefing-Video.mp4`](CLM-Executive-Briefing-Video.mp4) | 2:51 narrated video of the deck, 1080p, English subtitles built in |
 | [`CLM-Executive-Briefing-Video.srt`](CLM-Executive-Briefing-Video.srt) | Subtitles / transcript |
 | [`slides/`](slides/) | Each slide as a 1920×1080 PNG, for email or chat |
-| [`benchmark/`](benchmark/) | The measurements behind the numbers, and the script to measure a frontier model |
-| [`production/build_marketing.py`](production/build_marketing.py) | Rebuilds everything from the benchmark files |
+| [`benchmark/`](benchmark/) | The measurements behind the numbers |
+| Sources | The deck and video are built by [`Claude Code/tools/build_marketing.py`](../Claude%20Code/tools/build_marketing.py); see "Rebuild" below |
 
 ## The story in one minute
 
@@ -35,7 +35,7 @@ high-volume classification (cost, accuracy, latency, control), and where it does
 | 33 ms p50, 43 ms p95; 36.5 requests/s | `benchmark/results.json` (Apple M5 Pro laptop, 2026-10-18) | **Measured** |
 | ≈ $8 per million (CLM) | 7.6 compute-hours per million at the measured throughput × **assumed** $1/hour | Estimate; state the assumption |
 | $58 / $1,160 / $2,320 per million (frontier) | Anthropic list prices (cached 2026-10-06) × **estimated** 330 input + 50 output tokens per ticket | Estimate; a floor, since thinking tokens add output |
-| Frontier accuracy and latency on our data | Not measured (no API access when this was built) | **Run `benchmark/compare_frontier.py`** before quoting any figure |
+| Frontier accuracy and latency on our data | Not measured (no API access when this was built) | **Run `Claude Code/tools/compare_frontier.py`** before quoting any figure |
 
 Do not present the demo accuracy as accuracy on real customer data; the deck's footnotes
 say so. The pilot in the last slide is how to get that number.
@@ -47,7 +47,7 @@ say so. The pilot in the last slide is how to get that number.
 ```
 
 ```bash
-.venv/bin/python Marketing/benchmark/compare_frontier.py --models claude-haiku-5-5 claude-sonnet-5-5 claude-opus-5-5
+.venv/bin/python "Claude Code/tools/compare_frontier.py" --models claude-haiku-5-5 claude-sonnet-5-5 claude-opus-5-5
 ```
 
 It needs Anthropic API credentials (`ANTHROPIC_API_KEY`) and costs well under a dollar for
@@ -59,11 +59,11 @@ measured frontier results to the console summary, and they can be added to the s
 With CLM running (`bash "Claude Code/scripts/start.sh"`):
 
 ```bash
-.venv/bin/python evaluation/benchmark_service.py --model support-topic-1b --data src/clm/static/sample/support-tickets.csv --questions models/heads/support-topic-1b.json --out Marketing/benchmark/results.json
+.venv/bin/clm-benchmark --model support-topic-1b --data src/clm/static/sample/support-tickets.csv --questions models/heads/support-topic-1b.json --out Marketing/benchmark/results.json
 ```
 
 ```bash
-.venv/bin/python Marketing/production/build_marketing.py
+.venv/bin/python "Claude Code/tools/build_marketing.py"
 ```
 
 Needs Playwright, python-pptx, macOS `say` and ffmpeg. Narration speed: `STUDIO_RATE`

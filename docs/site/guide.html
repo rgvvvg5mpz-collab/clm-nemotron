@@ -188,7 +188,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
         <h2>Try it zero-shot as a smoke test</h2>
         <p>With no head loaded, <code>clm-serve</code> serves <code>clm-raw</code>: cosine similarity in Nemotron's own space, times a fixed 100. Use it to check the pipeline and to catch badly worded options. Don't use it to judge whether CLM can solve your problem: it ranks by retrieval similarity, which isn't your labelling rule, and its probabilities are uncalibrated (a cosine gap of 0.05 becomes 99%).</p>
       </div>
-<pre>python tools/local_embed_server.py --encoder nemotron-3-embed-1b     <span class="dim"># Mac; vLLM on a GPU box</span>
+<pre>clm-encoder --encoder nemotron-3-embed-1b     <span class="dim"># Mac; vLLM on a GPU box</span>
 clm-serve --encoder nemotron-3-embed-1b                               <span class="dim"># no --ckpt: clm-raw</span>
 
 from clm import CLMClient, Choice

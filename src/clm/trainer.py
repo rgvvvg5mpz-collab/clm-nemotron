@@ -64,7 +64,7 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
     typed questions in ``train_rows`` (a validation slice is held out by group), and
     write ``best_head.pt`` / ``final_head.pt`` / ``history.json`` to ``args.out_dir``.
 
-    ``args`` carries the options of ``train/finetune.py --task choice`` / ``clm-train``.
+    ``args`` carries the options of ``research/finetune.py --task choice`` / ``clm-train``.
     Returns the summary: test accuracy of the head, of ``clm-raw`` and of the majority label.
 
     ``progress(event: dict)`` is called as work advances (``stage`` = ``embedding`` with

@@ -9,9 +9,9 @@ Work with the user to:
 1. Agree on `clm` or `choice`, a run tag, and a fixed training and evaluation
    command.
 2. Create a fresh `autofinetune/<tag>` branch.
-3. Read `README.md`, `train/finetune.py`, `train/adapters.py`,
-   `train/embed_utils.py`, `preprocessing/hf_embeddings.py`, and
-   `evaluation/bon_eval.py`.
+3. Read `README.md`, `research/finetune.py`, `research/adapters.py`,
+   `src/clm/embed_backends.py`, `research/hf_embeddings.py`, and
+   `research/bon_eval.py`.
 4. Verify the dataset, checkpoint, folds, and GPU are available.
 5. Create an untracked `results.tsv` containing:
 
@@ -26,18 +26,18 @@ Work with the user to:
 Run training with the agreed command and redirect output:
 
 ```bash
-python train/finetune.py ... --out-dir runs/<tag>/<commit> > run.log 2>&1
+python research/finetune.py ... --out-dir runs/<tag>/<commit> > run.log 2>&1
 ```
 
 For `clm`, run the agreed held-out evaluation afterward:
 
 ```bash
-python evaluation/bon_eval.py ... --n <N> --window <K> >> run.log 2>&1
+python research/bon_eval.py ... --n <N> --window <K> >> run.log 2>&1
 ```
 
 **You may:**
 
-- Modify `train/finetune.py`.
+- Modify `research/finetune.py`.
 - Change the head, objective, optimizer, scheduler, batching, and
   hyperparameters.
 
@@ -73,7 +73,7 @@ Do not commit `results.tsv`, `run.log`, or run outputs.
 LOOP FOREVER:
 
 1. Inspect the current commit and previous results.
-2. Make one focused change to `train/finetune.py`.
+2. Make one focused change to `research/finetune.py`.
 3. Commit it.
 4. Run training and evaluation.
 5. Record the result.

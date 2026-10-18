@@ -12,7 +12,7 @@
   yes/no questions, exact level for ordered scales.
 - **Uncertainty.** The 95% binomial interval is about ±4–5 points at 100 test items near 95%
   accuracy, and about ±9 points at 100 items near 50–70%.
-- **Reproduce.** `evaluation/benchmark_service.py` (accuracy, latency, throughput against
+- **Reproduce.** `clm-benchmark` (accuracy, latency, throughput against
   a running service); `clm-train` and `finetune.py` print the three-way comparison at the end
   of every run.
 
@@ -81,5 +81,5 @@ faster; network hops add latency.
   wording or topic drift.
 - **Fairness.** No group attributes in the data; no fairness measurement was possible.
 - **Frontier comparison.** Frontier model accuracy and latency on this data were not
-  measured (no API access during evaluation). `Marketing/benchmark/compare_frontier.py`
+  measured (no API access during evaluation). `Claude Code/tools/compare_frontier.py`
   does it when credentials are available.

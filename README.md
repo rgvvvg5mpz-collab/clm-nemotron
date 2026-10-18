@@ -59,15 +59,14 @@ print(r.answers["label"].choice)        # delivery
 
 | Folder | For | Start with |
 | --- | --- | --- |
-| [`docs/`](docs/) | Everyone | [User guide](docs/USER_GUIDE.md) (step by step, with screenshots) · [Training](docs/TRAINING.md) · [API](docs/API.md) · [Research background](docs/RESEARCH.md) |
+| [`docs/`](docs/) | Everyone | [User guide](docs/USER_GUIDE.md) (step by step, with screenshots) · [Training](docs/TRAINING.md) · [API](docs/API.md) |
 | [`Crew Training/`](Crew%20Training/) | New users and trainers | The 5-minute training video, exercises and a knowledge check |
 | [`Marketing/`](Marketing/) | Executives | The briefing deck and 3-minute video (2:51): cost, accuracy, latency against frontier models |
 | [`Model Governance/`](Model%20Governance/) | Risk, compliance, architecture | Architecture, model inventory and cards, data lineage, evaluation, risks, sourcing policy |
-| [`Claude Code/`](Claude%20Code/) | Developers and operators | Runbook and scripts: setup, start, stop, status, tests, model release |
-| `src/clm/` | Developers | The package: `clm-serve`, `clm-train`, the engine and the playground |
-| `tools/` | Developers | The encoder server for Macs and CPUs; a mock playground server |
-| `train/`, `evaluation/`, `preprocessing/` | Researchers | Agent-trace training, best-of-N and service benchmarks, dataset tools |
-| `tests/` | Developers | `bash "Claude Code/scripts/test.sh"`: no GPU or network needed; CI runs it on every push |
+| [`Claude Code/`](Claude%20Code/) | Developers and operators | `scripts/`: setup, start, stop, status, tests, model release. `tools/`: builders for the videos, deck, screenshots and frontier benchmark |
+| [`src/clm/`](src/clm/) | Developers | The product. Commands: `clm-serve` (API and playground), `clm-train`, `clm-encoder` (the Nemotron encoder server), `clm-benchmark` |
+| [`tests/`](tests/) | Developers | `bash "Claude Code/scripts/test.sh"`: no GPU or network needed; CI runs it on every push |
+| [`research/`](research/) | Researchers | Upstream's method and published results, agent-trace training, best-of-N evaluation, the T-Rex demo |
 
 ## Models
 
@@ -91,5 +90,5 @@ A fork of [Contrastive-LM/CLM](https://github.com/Contrastive-LM/CLM) by Jacky K
 Kang, Tarun Suresh, Jon Saad-Falcon, Marco Pavone, Christopher Ré and Azalia Mirhoseini.
 This fork runs on NVIDIA's encoders instead of upstream's, adds training in the browser, a
 model release, and the folders above. The method and upstream results are described in
-[docs/RESEARCH.md](docs/RESEARCH.md). Code: Apache-2.0 ([LICENSE](LICENSE)). The Nemotron
+[research/README.md](research/README.md). Code: Apache-2.0 ([LICENSE](LICENSE)). The Nemotron
 encoder ships under OpenMDW-1.1, with its licence and notices inside the release archive.

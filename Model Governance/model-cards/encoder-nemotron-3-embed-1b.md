@@ -8,7 +8,7 @@
 | Role here | Frozen feature extractor. It is never trained or modified in this application. |
 | Architecture | Transformer, bidirectional attention, mean pooling; 1.14B parameters; 2048-dimension output; up to 32,768 tokens (this app caps texts at 8,192) |
 | Prompts | `query: ` before states, `passage: ` before label descriptions (NVIDIA's retrieval convention) |
-| Runs on | Apple MPS, NVIDIA CUDA or CPU, via `tools/local_embed_server.py` (sentence-transformers, bf16) |
+| Runs on | Apple MPS, NVIDIA CUDA or CPU, via `clm-encoder` (`src/clm/local_encoder.py`) (sentence-transformers, bf16) |
 
 ## Intended use (by its maker)
 

@@ -39,10 +39,10 @@ request.
 ```bash
 pip install -r requirements.txt
 # from the repo root, with clm-serve running (see Quickstart in the main README); for Jev put TYPESAFE_API_KEY=... in <repo>/.env
-python examples/t_rex/run.py --model clm                 # 5 seeds x 60 s, real time, shield on
-python examples/t_rex/run.py --model jev
-python examples/t_rex/run.py --model clm --no-shield     # the model's answer stands
-python examples/t_rex/run.py --model clm --lockstep 6    # game freezes while the model answers
+python research/examples/t_rex/run.py --model clm                 # 5 seeds x 60 s, real time, shield on
+python research/examples/t_rex/run.py --model jev
+python research/examples/t_rex/run.py --model clm --no-shield     # the model's answer stands
+python research/examples/t_rex/run.py --model clm --lockstep 6    # game freezes while the model answers
 ```
 
 `CLM_BASE_URL` (default `http://127.0.0.1:8700`), `CLM_API_KEY`, `TYPESAFE_BASE_URL` and

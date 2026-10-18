@@ -14,8 +14,8 @@ Parquet rows are samples in order: the metadata columns plus ``state_embedding``
 travels as ``clm_encoder.json`` next to ``data/``; a dataset without it is an
 upstream release from a different encoder, and training / evaluation refuse it.
 
-    python preprocessing/hf_embeddings.py download <user>/<dataset> --out data/train
-    python preprocessing/hf_embeddings.py export embeddings/train_pool/merged \\
+    python research/hf_embeddings.py download <user>/<dataset> --out data/train
+    python research/hf_embeddings.py export embeddings/train_pool/merged \\
         --out hf/deepswe_train --shards 16 --push <user>/<dataset>
 """
 from __future__ import annotations

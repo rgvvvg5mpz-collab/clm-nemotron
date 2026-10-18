@@ -8,7 +8,7 @@ to use.
 | --- | --- |
 | [`CLM-Crew-Training.mp4`](CLM-Crew-Training.mp4) | The video: 5:08, 1280×800, narrated, with English subtitles built in (switch them on in your player) |
 | [`CLM-Crew-Training.srt`](CLM-Crew-Training.srt) | The subtitles as a separate file; also a full transcript |
-| [`production/`](production/) | The scripts that recorded the video and the user-guide screenshots from the real application |
+| Sources | Recorded from the real application by [`Claude Code/tools/make_training_video.py`](../Claude%20Code/tools/make_training_video.py); see "Regenerating the video" below |
 
 Everything in the video is the real application; the model trained on screen is a real
 training run on the bundled sample data. Reference material for afterwards:
@@ -108,11 +108,11 @@ After a UI change, with CLM running:
 ```
 
 ```bash
-.venv/bin/python "Crew Training/production/make_training_video.py"
+.venv/bin/python "Claude Code/tools/make_training_video.py"
 ```
 
 ```bash
-.venv/bin/python "Crew Training/production/make_guide_screenshots.py"
+.venv/bin/python "Claude Code/tools/make_guide_screenshots.py"
 ```
 
 The narration uses macOS's built-in speech ("Ava (Premium)" by default, `STUDIO_VOICE` to

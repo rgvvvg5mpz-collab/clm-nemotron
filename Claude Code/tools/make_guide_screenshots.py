@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Take the user guide's screenshots from a running CLM (start it first with start.sh).
 
-    .venv/bin/python "Crew Training/production/make_guide_screenshots.py"
+    .venv/bin/python "Claude Code/tools/make_guide_screenshots.py"
 
 Writes docs/images/guide/NN-name.png at 1440x900. It trains one real model on the bundled
 sample (named "guide-demo") so the results screens are genuine.

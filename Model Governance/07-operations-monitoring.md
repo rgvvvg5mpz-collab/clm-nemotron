@@ -11,8 +11,8 @@ services. `status.sh` and `stop.sh` check and stop them. Full runbook:
 | Signal | How | Act when |
 | --- | --- | --- |
 | Service health | `GET /health` (encoder reachable, models loaded) or `status.sh` | Any check fails |
-| Latency | `X-CLM-Latency-Ms` response header; `evaluation/benchmark_service.py` | p95 exceeds 2× the baseline in doc 04 |
-| Accuracy on live traffic | Each week, a random sample of at least 100 decisions labelled by people, scored with `benchmark_service.py` | Drops more than 5 points below validation accuracy |
+| Latency | `X-CLM-Latency-Ms` response header; `clm-benchmark` | p95 exceeds 2× the baseline in doc 04 |
+| Accuracy on live traffic | Each week, a random sample of at least 100 decisions labelled by people, scored with `clm-benchmark` | Drops more than 5 points below validation accuracy |
 | Confidence distribution | Log the top-class probability; compare week-over-week histograms | A large shift, or growth in low-confidence answers |
 | Label mix | Share of each predicted label per week | A label's share changes by more than half without a business reason |
 | Input length | Characters per request | Many inputs near the 8,192-token budget |
