@@ -91,22 +91,22 @@ def save_head(path, encoder=None, hidden=4096, proj=8):
 def test_nemotron_is_the_only_encoder(monkeypatch):
     monkeypatch.delenv("CLM_ENCODER", raising=False)
     assert get_encoder().hf_id == "nvidia/Nemotron-3-Embed-8B-BF16"
-    assert list(ENCODERS) == ["nemotron-3-embed-8b"]
+    assert sorted(ENCODERS) == ["nemotron-3-embed-1b", "nemotron-3-embed-8b"]
+    assert all(e.hf_id.startswith("nvidia/") for e in ENCODERS.values())
 
 
 def test_repo_has_no_banned_model_references():
     banned = "q" + "wen"                                       # spelled out, this file would match itself
+    # files git tracks or would track (skips .venv, caches and everything else .gitignore'd)
+    listed = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=REPO,
+                            capture_output=True, text=True, check=True).stdout.split()
     hits = []
-    for root, dirs, files in os.walk(REPO):
-        dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", ".pytest_cache")]
-        for f in files:
-            path = os.path.join(root, f)
-            try:
-                text = open(path, encoding="utf-8").read()
-            except (UnicodeDecodeError, OSError):
-                continue                                       # binary assets
-            hits += [f"{os.path.relpath(path, REPO)}:{n}" for n, line in enumerate(text.splitlines(), 1)
-                     if banned in line.lower()]
+    for rel in listed:
+        try:
+            text = open(os.path.join(REPO, rel), encoding="utf-8").read()
+        except (UnicodeDecodeError, OSError):
+            continue                                           # binary assets, deleted files
+        hits += [f"{rel}:{n}" for n, line in enumerate(text.splitlines(), 1) if banned in line.lower()]
     assert hits == []
 
 
@@ -324,3 +324,46 @@ def test_choice_training_runs_and_reports_raw_baseline(tmp_path):
     ck = torch.load(out / "best_head.pt", map_location="cpu", weights_only=False)
     assert ck["cfg"]["encoder"] == NEMO.identity()
     HeadPair("trained", str(out / "best_head.pt"), "cpu", NEMO).ensure()   # servable as-is
+
+
+# ----------------------------------------------------------------------------- tools/local_embed_server.py
+def test_local_embed_server_speaks_the_vllm_subset():
+    from fastapi.testclient import TestClient
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import local_embed_server as les
+
+    class FakeST(torch.nn.Module):    # mean of per-token vectors, like the real pooling
+        def forward(self, f):
+            table = torch.randn(256, 8, generator=torch.Generator().manual_seed(0))
+            tok = table[f["input_ids"] % 256] * f["attention_mask"].unsqueeze(-1)
+            return {"sentence_embedding": tok.sum(1) / f["attention_mask"].sum(1, keepdim=True)}
+
+    class Tok:
+        pad_token_id = 0
+
+        def __call__(self, text, add_special_tokens=True):
+            return {"input_ids": ([1] if add_special_tokens else []) + [ord(c) % 250 + 2 for c in text]}
+
+    enc = les.LocalEncoder(FakeST(), Tok(), "cpu", batch_tokens=16)
+    c = TestClient(les.create_app(enc, {"nemotron-3-embed-1b", "nvidia/Nemotron-3-Embed-1B-BF16"}, 64, 8))
+    assert {m["id"] for m in c.get("/v1/models").json()["data"]} >= {"nemotron-3-embed-1b"}
+    r = c.post("/v1/embeddings", json={"model": "nemotron-3-embed-1b", "encoding_format": "base64",
+                                       "input": ["query: a", "passage: much longer text here"]}).json()
+    v = [np.frombuffer(base64.b64decode(d["embedding"]), dtype=np.float32) for d in r["data"]]
+    assert [d["index"] for d in r["data"]] == [0, 1] and all(abs(np.linalg.norm(x) - 1) < 1e-5 for x in v)
+    assert r["usage"]["prompt_tokens"] == len("query: a") + len("passage: much longer text here") + 2
+    # batching and padding must not change a vector
+    one = c.post("/v1/embeddings", json={"input": "query: a"}).json()["data"][0]["embedding"]
+    assert np.allclose(one, v[0], atol=1e-5)
+    # token ids (what the trainer sends) give the same vector as the text
+    ids = Tok()("query: a")["input_ids"]
+    assert np.allclose(c.post("/v1/embeddings", json={"input": [ids]}).json()["data"][0]["embedding"], one, atol=1e-5)
+    assert c.post("/v1/embeddings", json={"input": "x" * 100}).status_code == 400       # over max-model-len
+    assert c.post("/v1/embeddings", json={"input": "x" * 100, "truncate_prompt_tokens": 10}).status_code == 200
+    assert c.post("/v1/embeddings", json={"model": "other", "input": "x"}).status_code == 404
+    # and clm's own Embedder accepts its responses
+    one_b = dataclasses.replace(ENCODERS["nemotron-3-embed-1b"], hidden_size=8)
+    e = Embedder(url="http://t/v1/embeddings", encoder=one_b, tokenizer=None)
+    e.session = c
+    vec, tokens = e.embed(["hello"], "state")
+    assert vec.shape == (1, 8) and tokens > 0

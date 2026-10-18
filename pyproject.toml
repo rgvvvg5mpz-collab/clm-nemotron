@@ -26,8 +26,9 @@ dependencies = [
     "torch>=2.1",
     "fastapi>=0.100",
     "uvicorn>=0.23",
-    # the Nemotron-3-Embed-8B encoder server (GPU)
-    "vllm>=0.6",
+    # the Nemotron-3-Embed-8B encoder server (Linux + NVIDIA GPU); on macOS use the
+    # [mac] extra and tools/local_embed_server.py instead
+    "vllm>=0.6; sys_platform == 'linux'",
     # train/finetune.py: read the published Parquet embedding datasets
     "pyarrow>=14",
 ]
@@ -38,6 +39,8 @@ serve = []
 vllm = []
 # download checkpoints from the Hugging Face Hub with the hub client (plain HTTPS works without it)
 hf = ["huggingface_hub>=0.20"]
+# tools/local_embed_server.py: the encoder on Apple silicon (MPS) or CPU, no vLLM
+mac = ["sentence-transformers>=5.4.1", "transformers>=5.2", "huggingface_hub>=0.20"]
 all = ["contrastive-lm[hf]"]
 
 [project.scripts]

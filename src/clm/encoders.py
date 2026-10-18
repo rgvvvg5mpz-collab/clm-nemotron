@@ -98,6 +98,12 @@ ENCODERS: dict[str, EncoderSpec] = {
         name="nemotron-3-embed-8b", hf_id="nvidia/Nemotron-3-Embed-8B-BF16", hidden_size=4096,
         pooling="mean", state_prefix="query: ", action_prefix="passage: ", max_tokens=8192,
         origin="NVIDIA, built on Mistral AI's Ministral-3-8B; OpenMDW-1.1"),
+    # Its 1B sibling (same prompts and pooling, 2048-d): small enough for a laptop
+    # (tools/local_embed_server.py).  Heads trained on one size do not transfer to the other.
+    "nemotron-3-embed-1b": EncoderSpec(
+        name="nemotron-3-embed-1b", hf_id="nvidia/Nemotron-3-Embed-1B-BF16", hidden_size=2048,
+        pooling="mean", state_prefix="query: ", action_prefix="passage: ", max_tokens=8192,
+        origin="NVIDIA, Ministral-3 architecture, 1B; OpenMDW-1.1"),
 }
 
 DEFAULT_ENCODER = "nemotron-3-embed-8b"

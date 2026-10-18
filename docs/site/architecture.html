@@ -1,0 +1,312 @@
+<title>CLM Nemotron Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column (~70ch) with full-width figures; role colours (state = amber, action = blue) carry through every diagram, table and code sample. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --fg: #18202c;
+  --muted: #566173;
+  --line: #d6dce5;
+  --state: #a85f00;
+  --action: #1f55b5;
+  --trained: #0b6e66;
+  --frozen-fill: #e9edf3;
+  --code-bg: #eef1f6;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+    --state: #f0a845; --action: #82abff; --trained: #43c4b6; --frozen-fill: #1d2632; --code-bg: #1a222d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+  --state: #f0a845; --action: #82abff; --trained: #43c4b6; --frozen-fill: #1d2632; --code-bg: #1a222d;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+.page { max-width: 1040px; margin: 0 auto; display: grid; gap: 48px; }
+.prose { max-width: 70ch; display: grid; gap: 14px; min-width: 0; }
+header.top { display: grid; gap: 10px; max-width: 70ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2rem, 4.5vw, 2.9rem); line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 500; font-size: 1.15rem; margin: 0; }
+p { margin: 0; }
+.lede { font-size: 1.1rem; color: var(--muted); }
+a { color: var(--action); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55; }
+.state { color: var(--state); }
+.action { color: var(--action); }
+.trained { color: var(--trained); }
+section { display: grid; gap: 18px; }
+figure { margin: 0; display: grid; gap: 10px; }
+.fig-frame { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; overflow-x: auto; }
+.fig-frame svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--fg); }
+figcaption { color: var(--muted); font-size: .92rem; max-width: 80ch; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+.rules { display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; max-width: 75ch; }
+.rules li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rules li > b { font-family: var(--mono); font-weight: 500; font-size: 13px; color: var(--muted); }
+.nav { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .95rem; }
+footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 560px) { .rules li { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow">CLM on Nemotron · encoder-agnostic branch</div>
+    <h1>How a typed question becomes a probability</h1>
+    <p class="lede">CLM answers a question about a state by scoring each candidate answer against that state with two small trained networks that sit on top of a frozen NVIDIA Nemotron embedding model. Nothing generates text; every answer is a softmax over cosine similarities.</p>
+    <nav class="nav" aria-label="Pages">
+      <a href="#request">Request path</a><a href="#texts">What gets embedded</a><a href="#parity">Training and serving</a><a href="#components">Components</a><a href="#encoders">Encoders</a><a href="#rules">Compatibility rules</a>
+      <a href="https://claude.ai/artifact/9t3ShVgUsL283TkjNsaV5w">Classification guide →</a>
+    </nav>
+  </header>
+
+  <section id="request">
+    <div class="prose">
+      <h2>The request path</h2>
+      <p>One HTTP call carries a state and any number of questions. <code>clm-serve</code> turns each question into one <span class="state">state text</span> and a list of <span class="action">candidate texts</span>, fetches or computes their vectors, and returns one distribution per question.</p>
+    </div>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1000 330" role="img" aria-label="Request path: the client posts to clm-serve, which builds texts, checks the vector cache, sends misses through the embedder to the frozen encoder, projects them with the trained heads, scores by scaled cosine and returns softmax answers.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <g font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="13" fill="currentColor">
+            <!-- top row -->
+            <rect x="20" y="40" width="150" height="70" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="95" y="70" text-anchor="middle" font-weight="600">Client</text>
+            <text x="95" y="90" text-anchor="middle" font-size="12" fill="var(--muted)">CLMClient · playground</text>
+
+            <rect x="225" y="40" width="160" height="70" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="305" y="70" text-anchor="middle" font-weight="600">clm-serve :8700</text>
+            <text x="305" y="90" text-anchor="middle" font-size="12" fill="var(--muted)">schema.build_pairs</text>
+
+            <rect x="440" y="40" width="150" height="70" rx="6" fill="var(--surface)" stroke="currentColor" stroke-dasharray="5 4"/>
+            <text x="515" y="70" text-anchor="middle" font-weight="600">Vector cache</text>
+            <text x="515" y="90" text-anchor="middle" font-size="12" fill="var(--muted)">GPU arena, LRU</text>
+
+            <rect x="645" y="40" width="150" height="70" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="720" y="70" text-anchor="middle" font-weight="600">Embedder</text>
+            <text x="720" y="90" text-anchor="middle" font-size="12" fill="var(--muted)">prefix · truncate</text>
+
+            <rect x="850" y="40" width="130" height="70" rx="6" fill="var(--frozen-fill)" stroke="currentColor"/>
+            <text x="915" y="65" text-anchor="middle" font-weight="600">Encoder :8090</text>
+            <text x="915" y="83" text-anchor="middle" font-size="12" fill="var(--muted)">Nemotron, frozen</text>
+            <text x="915" y="99" text-anchor="middle" font-size="12" fill="var(--muted)">vLLM or local</text>
+
+            <!-- top arrows -->
+            <line x1="170" y1="75" x2="223" y2="75" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="197" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">POST</text>
+            <line x1="385" y1="75" x2="438" y2="75" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="412" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">texts</text>
+            <line x1="590" y1="75" x2="643" y2="75" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="617" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">misses</text>
+            <line x1="795" y1="75" x2="848" y2="75" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="822" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">HTTP</text>
+
+            <!-- bottom row -->
+            <rect x="830" y="220" width="150" height="70" rx="6" fill="var(--surface)" stroke="var(--trained)" stroke-width="1.6"/>
+            <text x="905" y="246" text-anchor="middle" font-weight="600" fill="var(--trained)">Projection heads</text>
+            <text x="905" y="264" text-anchor="middle" font-size="12" fill="var(--muted)">state MLP · action MLP</text>
+            <text x="905" y="280" text-anchor="middle" font-size="12" fill="var(--muted)">trained, ~20M params</text>
+
+            <rect x="560" y="220" width="190" height="70" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="655" y="248" text-anchor="middle" font-weight="600">scale · cos(s, a) ÷ T</text>
+            <text x="655" y="268" text-anchor="middle" font-size="12" fill="var(--muted)">one logit per candidate</text>
+
+            <rect x="300" y="220" width="180" height="70" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="390" y="248" text-anchor="middle" font-weight="600">softmax → Answer</text>
+            <text x="390" y="268" text-anchor="middle" font-size="12" fill="var(--muted)">noul · choice · score</text>
+
+            <!-- encoder down to heads -->
+            <line x1="915" y1="110" x2="915" y2="218" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="924" y="160" font-size="11" fill="var(--muted)">2048-d (1B)</text>
+            <text x="924" y="175" font-size="11" fill="var(--muted)">4096-d (8B)</text>
+            <!-- heads to score -->
+            <line x1="830" y1="255" x2="752" y2="255" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="791" y="246" text-anchor="middle" font-size="11" fill="var(--muted)">512-d</text>
+            <!-- cache hit bypass -->
+            <path d="M515,110 L515,170 L655,170 L655,218" fill="none" stroke="currentColor" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+            <text x="585" y="162" text-anchor="middle" font-size="11" fill="var(--muted)">hit: cached 512-d</text>
+            <!-- score to answer -->
+            <line x1="560" y1="255" x2="482" y2="255" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="521" y="246" text-anchor="middle" font-size="11" fill="var(--muted)">logits</text>
+            <!-- answer back to client -->
+            <path d="M300,255 L95,255 L95,112" fill="none" stroke="currentColor" marker-end="url(#ah)"/>
+            <text x="200" y="246" text-anchor="middle" font-size="11" fill="var(--muted)">JSON answers</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Only the projection heads are trained. The encoder is frozen and runs as its own server. A cache hit skips the embedder, the encoder and the heads. With no head loaded, <code>clm-raw</code> skips the heads and takes the cosine in the encoder's own space, with a fixed scale of 100.</figcaption>
+    </figure>
+  </section>
+
+  <section id="texts">
+    <div class="prose">
+      <h2>What actually gets embedded</h2>
+      <p>The question's wording ends up on the <span class="state">state</span> side, appended after the context. Each option's description is embedded on its own as an <span class="action">action</span>. Nemotron is an asymmetric retriever, so the two sides get different prompts: <code class="state">query: </code> for states and <code class="action">passage: </code> for candidates. <code>clm-serve</code> adds them; callers never should.</p>
+    </div>
+    <pre><span class="mono" style="color:var(--muted)"># a choice question, as the encoder sees it</span>
+<span class="state">query: thread:
+  - role: customer
+    text: I ordered the wireless headphones, but got a Bluetooth speaker instead.
+  ...
+
+What is this customer conversation primarily about?</span>
+
+<span class="action">passage: A charge, invoice, subscription or payment problem.</span>          → billing
+<span class="action">passage: Shipping, fulfilment or delivery of a physical item.</span>        → delivery
+<span class="action">passage: The customer is explicitly asking for money back.</span>          → refund</pre>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Question type</th><th>Candidates embedded</th><th>Answer returned</th></tr></thead>
+        <tbody>
+          <tr><td><code>choice</code></td><td>Each option's description, verbatim. The key itself when the description is empty.</td><td><code>choice</code> (argmax key), <code>probabilities</code>, <code>confidence</code> = top − mean of the rest</td></tr>
+          <tr><td><code>score</code></td><td>Each rubric level, in order (≥ 2 levels)</td><td><code>score</code> = expected level index, <code>probabilities</code>, <code>legend</code></td></tr>
+          <tr><td><code>noul</code></td><td><code>true: …</code> and <code>false: …</code> descriptions. Defaults to <code>Yes. This is true: &lt;instructions&gt;</code> and its negation.</td><td><code>noul</code> = probability of true</td></tr>
+          <tr><td><code>rank</code></td><td>Each free-form candidate string</td><td>Candidates sorted best first, with probabilities</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="parity">
+    <div class="prose">
+      <h2>Training and serving share one input path</h2>
+      <p>A head only works on vectors built exactly the way it was trained on. So <code>train/finetune.py</code> and <code>clm-serve</code> go through the same code: <code>schema.build_pairs</code> lays out the texts, and <code>EncoderSpec.prepare</code> adds the prompt and truncates. Every checkpoint is stamped with the encoder it was trained on, and that stamp is checked when it loads.</p>
+    </div>
+    <figure>
+      <div class="fig-frame">
+        <svg viewBox="0 0 1000 300" role="img" aria-label="Training and serving pass through the same build_pairs, prepare and encoder; the trained checkpoint records its encoder and clm-serve checks it before loading the heads.">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <g font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="13" fill="currentColor">
+            <text x="20" y="70" font-weight="600">Training</text>
+            <text x="20" y="88" font-size="12" fill="var(--muted)">finetune.py</text>
+            <text x="20" y="220" font-weight="600">Serving</text>
+            <text x="20" y="238" font-size="12" fill="var(--muted)">clm-serve</text>
+
+            <rect x="160" y="30" width="150" height="240" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="235" y="146" text-anchor="middle" font-weight="600">build_pairs</text>
+            <text x="235" y="164" text-anchor="middle" font-size="12" fill="var(--muted)">context + question</text>
+
+            <rect x="350" y="30" width="160" height="240" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="430" y="138" text-anchor="middle" font-weight="600">prepare(role)</text>
+            <text x="430" y="156" text-anchor="middle" font-size="12" fill="var(--state)">query: …</text>
+            <text x="430" y="172" text-anchor="middle" font-size="12" fill="var(--action)">passage: …</text>
+
+            <rect x="550" y="30" width="140" height="240" rx="6" fill="var(--frozen-fill)" stroke="currentColor"/>
+            <text x="620" y="146" text-anchor="middle" font-weight="600">Encoder</text>
+            <text x="620" y="164" text-anchor="middle" font-size="12" fill="var(--muted)">same model</text>
+
+            <rect x="730" y="40" width="120" height="60" rx="6" fill="var(--surface)" stroke="var(--trained)" stroke-width="1.6"/>
+            <text x="790" y="66" text-anchor="middle" font-weight="600" fill="var(--trained)">train heads</text>
+            <text x="790" y="84" text-anchor="middle" font-size="12" fill="var(--muted)">InfoNCE</text>
+
+            <rect x="870" y="40" width="115" height="60" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="927" y="66" text-anchor="middle" font-weight="600">best_head.pt</text>
+            <text x="927" y="84" text-anchor="middle" font-size="11" fill="var(--muted)">cfg.encoder</text>
+
+            <rect x="730" y="200" width="120" height="60" rx="6" fill="var(--surface)" stroke="var(--trained)" stroke-width="1.6"/>
+            <text x="790" y="226" text-anchor="middle" font-weight="600" fill="var(--trained)">heads</text>
+            <text x="790" y="244" text-anchor="middle" font-size="12" fill="var(--muted)">score</text>
+
+            <rect x="870" y="200" width="115" height="60" rx="6" fill="var(--surface)" stroke="currentColor"/>
+            <text x="927" y="234" text-anchor="middle" font-weight="600">answers</text>
+
+            <line x1="110" y1="78" x2="158" y2="78" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="110" y1="228" x2="158" y2="228" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="310" y1="78" x2="348" y2="78" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="310" y1="228" x2="348" y2="228" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="510" y1="78" x2="548" y2="78" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="510" y1="228" x2="548" y2="228" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="690" y1="70" x2="728" y2="70" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="690" y1="230" x2="728" y2="230" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="850" y1="70" x2="868" y2="70" stroke="currentColor" marker-end="url(#ah2)"/>
+            <line x1="850" y1="230" x2="868" y2="230" stroke="currentColor" marker-end="url(#ah2)"/>
+            <path d="M927,100 L927,150 L790,150 L790,198" fill="none" stroke="var(--trained)" stroke-width="1.4" marker-end="url(#ah2)"/>
+            <text x="858" y="142" text-anchor="middle" font-size="11" fill="var(--trained)">--ckpt</text>
+            <text x="858" y="172" text-anchor="middle" font-size="11" fill="var(--muted)">encoder must match</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Columns that span both lanes are literally the same functions. The only difference is the last hop: training sends token ids, while serving sends the prepared text. Both come out of the same <code>prepare()</code> call.</figcaption>
+    </figure>
+  </section>
+
+  <section id="components">
+    <div class="prose"><h2>Components</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/clm/encoders.py</code></td><td>Encoder profiles: model id, width, pooling, the <span class="state">query</span> / <span class="action">passage</span> prompts, token budget, and the truncation side per role. Holds the compatibility check.</td></tr>
+          <tr><td><code>src/clm/schema.py</code></td><td>Turns a state and typed questions into texts (<code>build_pairs</code>), and turns logits into typed answers.</td></tr>
+          <tr><td><code>src/clm/embedder.py</code></td><td>Client for <code>/v1/embeddings</code>. Adds the role prompt, truncates with the encoder's tokenizer (keeping the end of a state and the start of a candidate), keeps an LRU cache and checks the vector width.</td></tr>
+          <tr><td><code>src/clm/heads.py</code></td><td>The two MLP heads (encoder width → 512), checkpoint load and hot reload.</td></tr>
+          <tr><td><code>src/clm/engine.py</code></td><td>In-process engine: <code>answer()</code>, <code>rank()</code>, the model list, the default model (<code>clm-latest</code>, else <code>clm-raw</code>).</td></tr>
+          <tr><td><code>src/clm/cache.py</code></td><td>A fixed device-memory arena for projected vectors, keyed by head generation.</td></tr>
+          <tr><td><code>src/clm/server.py</code></td><td>FastAPI app <code>clm-serve</code>: <code>/v1/systemone</code>, <code>/v1/rank</code>, <code>/v1/models</code>, <code>/health</code>, and the playground.</td></tr>
+          <tr><td><code>tools/local_embed_server.py</code></td><td><code>/v1/embeddings</code> on Apple silicon or CPU via sentence-transformers. It behaves like vLLM where callers depend on it.</td></tr>
+          <tr><td><code>train/finetune.py</code></td><td>Trains heads on typed questions (<code>--task choice</code>) or agent traces (<code>--task clm</code>) and stamps the encoder into the checkpoint.</td></tr>
+          <tr><td><code>evaluation/bon_eval.py</code></td><td>Best-of-N trajectory selection with a trained head.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="encoders">
+    <div class="prose">
+      <h2>Encoders</h2>
+      <p>Both profiles are NVIDIA retrieval embedders on the Ministral-3 architecture, under the OpenMDW-1.1 licence. Heads trained on one size never transfer to the other.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="num">
+        <thead><tr><th>Profile</th><th>Hub id</th><th>Width</th><th>Weights</th><th>Runs on</th></tr></thead>
+        <tbody>
+          <tr><td><code>nemotron-3-embed-8b</code> (default)</td><td><code>nvidia/Nemotron-3-Embed-8B-BF16</code></td><td>4096</td><td>15.9 GB</td><td>vLLM on a Linux NVIDIA GPU; loads locally on 32 GB+ Macs</td></tr>
+          <tr><td><code>nemotron-3-embed-1b</code></td><td><code>nvidia/Nemotron-3-Embed-1B-BF16</code></td><td>2048</td><td>2.3 GB</td><td>Laptops: <code>tools/local_embed_server.py</code>, about 8.5k tokens/s on an M5 Pro</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="prose"><h2>Compatibility rules</h2></div>
+    <ul class="rules">
+      <li><b>Heads</b><span>A checkpoint records <code>cfg["encoder"]</code>. <code>clm-serve --encoder X</code> refuses any head trained on another encoder, and any head that records none (upstream releases).</span></li>
+      <li><b>Embeddings</b><span>Embedding directories and datasets carry the same stamp. <code>finetune.py</code> and <code>bon_eval.py</code> refuse to mix them across encoders.</span></li>
+      <li><b>Width</b><span>The embedder rejects vectors whose width doesn't match the profile, which catches a server running the wrong model.</span></li>
+      <li><b>Prompts</b><span>Only <code>clm-serve</code> and the trainer add <code>query: </code> / <code>passage: </code>. The encoder server must not add its own.</span></li>
+      <li><b>Truncation</b><span>The token budget includes the prompt. States keep their end and candidates their start, so the prompt is never cut.</span></li>
+    </ul>
+  </section>
+
+  <footer>Describes branch <code>encoder-agnostic</code> of the CLM fork in <code>CLM-Piyush</code>. Upstream CLM is Apache-2.0.</footer>
+</div>

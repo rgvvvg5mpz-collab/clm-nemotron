@@ -15,8 +15,19 @@ MAXLEN="${MAXLEN:-8192}"     # model supports 32768; clm-serve --max-tokens must
 LOGDIR="${LOGDIR:-$(cd "$(dirname "$0")/.." && pwd)/logs}"
 EXTRA=()
 if [ "${FP8:-0}" = "1" ]; then EXTRA+=(--quantization fp8_per_tensor); fi
+if ! command -v vllm >/dev/null 2>&1; then
+    echo "error: vllm not found. It needs Linux with an NVIDIA GPU (pip install vllm there);" >&2
+    echo "       it does not run on macOS / Apple silicon." >&2
+    exit 1
+fi
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo "error: no NVIDIA GPU found (nvidia-smi missing); vLLM cannot serve the encoder here." >&2
+    exit 1
+fi
 mkdir -p "$LOGDIR"
+LOG="$LOGDIR/vllm_nemotron3_embed_8b.log"
 echo "serving Nemotron-3-Embed-8B on GPU $GPU port $PORT (util $UTIL, max-model-len $MAXLEN)"
+echo "log: $LOG   (ready when 'curl -s localhost:$PORT/v1/models' answers)"
 CUDA_VISIBLE_DEVICES=$GPU exec vllm serve nvidia/Nemotron-3-Embed-8B-BF16 \
     --served-model-name nemotron-3-embed-8b \
     --runner pooling \
@@ -26,4 +37,4 @@ CUDA_VISIBLE_DEVICES=$GPU exec vllm serve nvidia/Nemotron-3-Embed-8B-BF16 \
     --max-num-seqs 32 \
     --port "$PORT" \
     ${EXTRA[@]+"${EXTRA[@]}"} \
-    >> "$LOGDIR/vllm_nemotron3_embed_8b.log" 2>&1
+    >> "$LOG" 2>&1

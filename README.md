@@ -90,6 +90,23 @@ The model accepts up to 32768 tokens: raise `--max-model-len` on `vllm serve` an
 `clm-serve --max-tokens` together (this needs more GPU memory). On Hopper or Ada GPUs,
 `--quantization fp8_per_tensor` halves the encoder's memory.
 
+### On a Mac (Apple silicon, no vLLM)
+
+vLLM needs Linux and an NVIDIA GPU. On a Mac, `tools/local_embed_server.py` serves the
+encoder with sentence-transformers on the GPU (MPS) behind the same `/v1/embeddings` API.
+The 1B sibling (`nvidia/Nemotron-3-Embed-1B-BF16`, 2.3 GB, 2048-d) fits a laptop comfortably;
+the 8B (16 GB) also loads with `--encoder nemotron-3-embed-8b` on a 32 GB+ machine.
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[mac]"
+.venv/bin/python tools/local_embed_server.py --encoder nemotron-3-embed-1b        # :8090
+.venv/bin/clm-serve --encoder nemotron-3-embed-1b                                  # :8700
+```
+
+Train against it with the same `--encoder`:
+`.venv/bin/python train/finetune.py --task choice --encoder nemotron-3-embed-1b --embed-url http://127.0.0.1:8090/v1/embeddings ...`.
+Heads trained on the 1B only work with the 1B; `clm-serve` refuses them with the 8B.
+
 ### Ask typed questions about a state
 
 ```python
@@ -393,6 +410,7 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── server.py                #   FastAPI app, `clm-serve`
 │   └── static/                  #   the playground: index.html + app.css + app.js, no build step
 ├── tools/playground_mock.py     # serve the playground without a GPU (fake encoder)
+├── tools/local_embed_server.py  # /v1/embeddings on Apple silicon / CPU (sentence-transformers)
 ├── train/                       # fine-tuning
 │   ├── finetune.py              #   trains the projection heads on a frozen encoder
 │   ├── adapters.py              #   dataset adapters: agentic traces, typed decisions
@@ -461,7 +479,7 @@ files only; every API route above shadows it.
 ### `clm-serve` options
 
 ```
-clm-serve [--port 8700] [--encoder nemotron-3-embed-8b]
+clm-serve [--port 8700] [--encoder nemotron-3-embed-8b|nemotron-3-embed-1b]
           [--emb-url http://127.0.0.1:8090/v1/embeddings] [--emb-model NAME]
           [--max-tokens 8192] [--ckpt PATH] [--ckpt-dir DIR] [--model NAME=PATH ...] [--device cpu|cuda]
           [--action-cache 0.02|512MiB|0] [--no-ui] [--cors]

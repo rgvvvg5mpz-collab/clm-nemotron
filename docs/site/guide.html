@@ -1,0 +1,341 @@
+<title>Classifying with CLM</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a numbered procedure in one reading column (~70ch); worked examples and tables break out to full width. Role colours: state = amber, action = blue, trained = teal. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --fg: #18202c;
+  --muted: #566173;
+  --line: #d6dce5;
+  --state: #a85f00;
+  --action: #1f55b5;
+  --trained: #0b6e66;
+  --bad: #b3261e;
+  --good: #1d7a3a;
+  --code-bg: #eef1f6;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+    --state: #f0a845; --action: #82abff; --trained: #43c4b6; --bad: #ff8a80; --good: #7bd88f; --code-bg: #1a222d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #151c26; --fg: #e2e7ee; --muted: #9aa5b6; --line: #2a3442;
+  --state: #f0a845; --action: #82abff; --trained: #43c4b6; --bad: #ff8a80; --good: #7bd88f; --code-bg: #1a222d;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+.page { max-width: 1040px; margin: 0 auto; display: grid; gap: 52px; }
+.prose { max-width: 70ch; display: grid; gap: 14px; min-width: 0; }
+header.top { display: grid; gap: 12px; max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2rem, 4.5vw, 2.9rem); line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 500; font-size: 1.15rem; margin: 0; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 1.25rem; display: grid; gap: 6px; }
+.lede { font-size: 1.1rem; color: var(--muted); }
+a { color: var(--action); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: .88em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55; }
+.state { color: var(--state); }
+.action { color: var(--action); }
+.trained { color: var(--trained); }
+.dim { color: var(--muted); }
+section.step { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 18px; }
+.step-no { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; color: var(--muted); font-variant-numeric: tabular-nums; }
+.step-body { display: grid; gap: 16px; min-width: 0; }
+.path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.path > div { padding: 16px 18px; display: grid; gap: 6px; align-content: start; border-right: 1px solid var(--line); }
+.path > div:last-child { border-right: 0; }
+.path b { font-family: var(--display); font-weight: 600; font-size: 1.05rem; }
+.path .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.pair > div { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.verdict { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.verdict.bad { color: var(--bad); }
+.verdict.good { color: var(--good); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.best td { font-weight: 600; }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); max-width: 70ch; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .95rem; }
+footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 720px) {
+  .path { grid-template-columns: 1fr; }
+  .path > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .path > div:last-child { border-bottom: 0; }
+  .pair { grid-template-columns: 1fr; }
+  section.step { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow">CLM on Nemotron · practitioner guide</div>
+    <h1>Solving a classification problem with CLM</h1>
+    <p class="lede">You don't prompt CLM the way you prompt a chat model, and you don't fine-tune the model itself. You write a state, a question and option texts, and if zero-shot isn't good enough, you train two small heads on labelled examples. This page covers when to do which.</p>
+    <nav class="nav" aria-label="Pages"><a href="#results">Results from a real run</a><a href="#fix">What to change when</a><a href="https://claude.ai/artifact/4BPQENTTyiVFYRNsDamdgL">Architecture →</a></nav>
+  </header>
+
+  <div class="path" aria-label="Three levels of effort">
+    <div><span class="tag">ZERO-SHOT · MINUTES</span><b>Write good options</b><p>Serve <code>clm-raw</code> to check the setup and your wording. Treat it as a smoke test: in our run it scored below always guessing the majority label.</p></div>
+    <div><span class="tag">FINE-TUNE · HOURS</span><b>Train the heads</b><p>A few hundred labelled examples. The encoder stays frozen; only the two projection heads learn your labels.</p></div>
+    <div><span class="tag">CALIBRATE · MINUTES</span><b>Fit temperature and thresholds</b><p>Use a held-out split to make the probabilities mean something before anything acts on them.</p></div>
+  </div>
+
+  <section class="step" id="frame">
+    <div class="step-no">1</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Frame the problem as a typed question</h2>
+        <p>Each question is answered independently against the same state, so one request can carry the whole decision (category, urgency, needs-review) in a single call.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Your problem</th><th>Use</th><th>You get</th></tr></thead>
+          <tbody>
+            <tr><td>One label from a fixed set (routing, category, disposition)</td><td><code>choice</code></td><td>The best key and a distribution over all keys</td></tr>
+            <tr><td>An ordered scale (severity, urgency, quality)</td><td><code>score</code></td><td>The expected level, e.g. 2.23 on a 0–3 rubric, plus the distribution</td></tr>
+            <tr><td>Is a statement true of this state (fraud, needs a human, duplicate)?</td><td><code>noul</code></td><td>The probability that it's true</td></tr>
+            <tr><td>Many or open-ended candidates (tools, documents, best-of-N answers)</td><td><code>rank</code></td><td>Candidates sorted best first</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Multi-label problems (several tags can apply at once) are one <code>noul</code> per tag, not one <code>choice</code>. A <code>choice</code> softmax always sums to 1 across its options.</p>
+    </div>
+  </section>
+
+  <section class="step" id="state">
+    <div class="step-no">2</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Write the state: context only</h2>
+        <ul>
+          <li><b>Context goes in the state, the question goes in <code>instructions</code>.</b> CLM appends the question after the context, which is the layout the heads were trained on. Repeating the question inside the state only adds noise.</li>
+          <li><b>Send objects, not JSON strings.</b> A state object or array is rendered as <code>key: value</code> lines because the heads are trained on prose. A pre-serialised JSON string is embedded as raw JSON.</li>
+          <li><b>Put what decides the label near the end.</b> An over-long state keeps its last tokens (8,192 by default, prompt included), so boilerplate and history belong first.</li>
+          <li><b>Drop fields that can't matter.</b> IDs, timestamps and hashes take up budget and pull the vector towards things your options never mention.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="options">
+    <div class="step-no">3</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Write the options. This is the prompt.</h2>
+        <p>Each option's description is embedded on its own as a <span class="action">passage</span> and compared against the <span class="state">state + question</span> vector. The description has to read like an answer to that question, in the vocabulary the state uses. The key is only a name for the result; when a description is given, the key is never embedded.</p>
+      </div>
+      <div class="pair">
+        <div>
+          <span class="verdict bad">Weak</span>
+<pre>"department": {"type": "choice",
+  "instructions": "Department?",
+  "criteria": {
+    "billing":   "Billing department",
+    "technical": "Technical department",
+    "other":     "Other"}}</pre>
+          <p class="dim">The descriptions share one template, so they embed almost alike; "Other" matches everything a little.</p>
+        </div>
+        <div>
+          <span class="verdict good">Strong</span>
+<pre>"department": {"type": "choice",
+  "instructions": "Which team should handle this?",
+  "criteria": {
+    "billing":   "A charge, invoice, refund or payment problem.",
+    "technical": "The product is broken, erroring or down.",
+    "account":   "Login, password, plan or access changes."}}</pre>
+          <p class="dim">Each description names the evidence that would appear in the state, and no two share wording.</p>
+        </div>
+      </div>
+      <div class="prose">
+        <ul>
+          <li><b>Make options mutually distinct.</b> Shared boilerplate ("A ticket about …") adds the same vector to every option and shrinks the differences you need.</li>
+          <li><b>Avoid catch-alls.</b> "Other" or "None of the above" has no content to match. When you need an escape hatch, use a separate <code>noul</code> ("This fits none of the categories") or a threshold on <code>confidence</code>.</li>
+          <li><b>For <code>score</code>, write parallel, monotonic levels:</b> "Negligible: …", "Low: …", "Moderate: …". The answer is the expected index, so the order must mean something.</li>
+          <li><b>For <code>noul</code>, give both sides.</b> <code>criteria: {"true": "…", "false": "…"}</code> describing what each case looks like beats the default "Yes. This is true: &lt;statement&gt;".</li>
+          <li><b>Don't add <code>query:</code> / <code>passage:</code> yourself.</b> <code>clm-serve</code> adds Nemotron's prompts.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="zeroshot">
+    <div class="step-no">4</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Try it zero-shot as a smoke test</h2>
+        <p>With no head loaded, <code>clm-serve</code> serves <code>clm-raw</code>: cosine similarity in Nemotron's own space, times a fixed 100. Use it to check the pipeline and to catch badly worded options. Don't use it to judge whether CLM can solve your problem: it ranks by retrieval similarity, which isn't your labelling rule, and its probabilities are uncalibrated (a cosine gap of 0.05 becomes 99%).</p>
+      </div>
+<pre>python tools/local_embed_server.py --encoder nemotron-3-embed-1b     <span class="dim"># Mac; vLLM on a GPU box</span>
+clm-serve --encoder nemotron-3-embed-1b                               <span class="dim"># no --ckpt: clm-raw</span>
+
+from clm import CLMClient, Choice
+r = CLMClient().system_one(state={"thread": [...]}, questions={"department": Choice(...)})
+r.answers["department"].choice, r.answers["department"].probabilities</pre>
+      <p class="note">A real example from the 1B in raw mode: for "What causes tides on Earth?" it ranked "Because the Earth is round." (cos 0.365) above "The Moon's gravitational pull." (cos 0.319) at 99% to 1%. The retriever rewards shared words like "Earth". That's why raw mode needs carefully worded options, and why a trained head helps.</p>
+    </div>
+  </section>
+
+  <section class="step" id="data">
+    <div class="step-no">5</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Label a set and split it honestly</h2>
+        <ul>
+          <li>Aim for a few hundred labelled states, with at least ~30 per option you care about. Hold out a test split you never tune on.</li>
+          <li>Split by source entity (customer, account, incident), never by row, or near-duplicates leak into the test.</li>
+          <li>Where annotators disagree, keep their distribution: <code>gold.probabilities</code> trains soft targets, which teaches the head that "urgency 2 or 3" is a real answer.</li>
+        </ul>
+        <p>The trainer reads parquet files in the <code>LocalLLaMA/typed-decisions</code> layout, <code>&lt;workflow&gt;/train-*.parquet</code> and <code>test-*.parquet</code>, with one row per state:</p>
+      </div>
+<pre>id:        "tr_customer_service_000003"
+state:     {"account": {...}, "orders": [...], "thread": [{"role": "customer", "text": "...got a Bluetooth speaker instead..."}]}
+questions: {"category": {"type": "choice", "instructions": "What is this customer conversation primarily about?",
+                         "criteria": {"delivery": "Shipping, fulfilment or delivery of a physical item.", ...}},
+            "urgency":  {"type": "score", "criteria": ["No time pressure; ...", "Routine; ...", "Elevated; ...", "Critical; ..."]}}
+gold:      {"category": {"label": "delivery", "probabilities": {"delivery": 0.95, "account": 0.027, ...}},
+            "urgency":  {"label": "2",        "probabilities": {"2": 0.633, "3": 0.3, "1": 0.067, "0": 0.0}}}</pre>
+    </div>
+  </section>
+
+  <section class="step" id="finetune">
+    <div class="step-no">6</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Fine-tune the heads, not the model</h2>
+        <p>Training embeds every state and option once with the frozen encoder, using the same prompts and truncation as serving, then trains only the <span class="trained">state and action heads</span>. On a laptop with the 1B encoder, embedding is the slow part and training takes minutes.</p>
+      </div>
+<pre>python train/finetune.py --task choice --encoder nemotron-3-embed-1b \
+    --data LocalLLaMA/typed-decisions --workflow all \
+    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-1b \
+    --out-dir runs/typed-1b</pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Knob</th><th>Default</th><th>Change it when</th></tr></thead>
+          <tbody>
+            <tr><td><code>--targets soft|hard</code></td><td><code>soft</code></td><td>Use <code>hard</code> only if you have single labels and no annotator distribution.</td></tr>
+            <tr><td><code>--loss infonce|softce</code></td><td><code>infonce</code></td><td><code>infonce</code> contrasts against every option text in the batch, which helps when option sets differ between questions. <code>softce</code> only compares a question's own options; try it when one fixed option set dominates.</td></tr>
+            <tr><td><code>--width</code>, <code>--depth</code></td><td>1536, 3</td><td>Smaller (512, 2) for a few hundred examples if validation accuracy peaks early and falls.</td></tr>
+            <tr><td><code>--epochs</code>, <code>--patience</code></td><td>20, 5</td><td>The best epoch by validation accuracy is kept as <code>best_head.pt</code>; raise patience for noisy labels.</td></tr>
+            <tr><td><code>--encoder</code></td><td><code>nemotron-3-embed-8b</code></td><td>Must match the encoder you'll serve with. Heads don't transfer between the 1B and the 8B.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">The head maps texts to vectors; it never learns a fixed list of keys. So it will score questions and option wordings it never saw, but nothing guarantees that transfer. Before relying on new options, measure them on labelled examples.</p>
+    </div>
+  </section>
+
+  <section class="step" id="results">
+    <div class="step-no">7</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Read the results against two baselines</h2>
+        <p>The trainer prints three numbers on the same test split: always predicting the most common label, <code>clm-raw</code> (no head), and the trained head. Below are the numbers from one real run on this Mac.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Model</th><th>What it is</th><th class="n">Test accuracy</th></tr></thead>
+          <tbody>
+            <tr><td>Majority label</td><td>Always the most common label per question</td><td class="n">45.0%</td></tr>
+            <tr><td><code>clm-raw</code></td><td>Nemotron-3-Embed-1B cosine, no head</td><td class="n">37.8%</td></tr>
+            <tr class="best"><td>Trained head</td><td>Best of 20 epochs by validation (epoch 15)</td><td class="n">69.2%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p>On this data, zero-shot <code>clm-raw</code> scored <b>below the majority baseline</b>. The trained heads added about 31 points over raw mode and 24 over majority. Training used 1,080 labelled states (5,400 questions), took 4.2 minutes end to end on an M5 Pro, and almost all of that was embedding.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>Type</th><th class="n">clm-raw</th><th class="n">Head</th><th class="n">Δ pts</th></tr></thead>
+          <tbody>
+          <tr><td><code>category</code></td><td>choice</td><td class="n">56%</td><td class="n">92%</td><td class="n">+36</td></tr>
+          <tr><td><code>duplicate</code></td><td>noul</td><td class="n">11%</td><td class="n">89%</td><td class="n">+78</td></tr>
+          <tr><td><code>needs_review</code></td><td>noul</td><td class="n">45%</td><td class="n">80%</td><td class="n">+35</td></tr>
+          <tr><td><code>true_positive</code></td><td>noul</td><td class="n">73%</td><td class="n">78%</td><td class="n">+5</td></tr>
+          <tr><td><code>risk</code></td><td>score</td><td class="n">45%</td><td class="n">75%</td><td class="n">+30</td></tr>
+          <tr><td><code>credential_compromise</code></td><td>noul</td><td class="n">54%</td><td class="n">74%</td><td class="n">+20</td></tr>
+          <tr><td><code>needs_human</code></td><td>noul</td><td class="n">34%</td><td class="n">73%</td><td class="n">+39</td></tr>
+          <tr><td><code>severity</code></td><td>score</td><td class="n">47%</td><td class="n">72%</td><td class="n">+25</td></tr>
+          <tr><td><code>churn_risk</code></td><td>score</td><td class="n">28%</td><td class="n">67%</td><td class="n">+39</td></tr>
+          <tr><td><code>matches_order</code></td><td>noul</td><td class="n">46%</td><td class="n">67%</td><td class="n">+21</td></tr>
+          <tr><td><code>action</code></td><td>choice</td><td class="n">22%</td><td class="n">66%</td><td class="n">+45</td></tr>
+          <tr><td><code>disposition</code></td><td>choice</td><td class="n">28%</td><td class="n">64%</td><td class="n">+36</td></tr>
+          <tr><td><code>urgency</code></td><td>score</td><td class="n">32%</td><td class="n">62%</td><td class="n">+31</td></tr>
+          <tr><td><code>outcome</code></td><td>choice</td><td class="n">50%</td><td class="n">59%</td><td class="n">+9</td></tr>
+          <tr><td><code>discrepancy_severity</code></td><td>score</td><td class="n">41%</td><td class="n">48%</td><td class="n">+7</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Test split of <code>LocalLLaMA/typed-decisions</code> (all four workflows, 400 states). Each question has 100 test examples, except <code>urgency</code>, which appears in every workflow (400), so per-question figures move by roughly ±9 points by chance. <code>duplicate</code> shows raw mode's weak spot: 11% raw, 89% with a head. Structural yes/no checks don't map onto retrieval similarity.</p>
+    </div>
+  </section>
+
+  <section class="step" id="calibrate">
+    <div class="step-no">8</div>
+    <div class="step-body">
+      <div class="prose">
+        <h2>Calibrate before anything acts on a probability</h2>
+        <ul>
+          <li><b>Temperature.</b> Every request takes <code>temperature</code>, which divides the logits. Pick the value that minimises log-loss on your validation split, then send it on every call.</li>
+          <li><b>Thresholds for <code>noul</code>.</b> Choose the cut-off that gives the precision you need on validation; 0.5 is rarely right.</li>
+          <li><b>Abstain on low confidence.</b> <code>confidence</code> is the top probability minus the mean of the others. Route anything below your validation-chosen floor to a person.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="serve">
+    <div class="step-no">9</div>
+    <div class="step-body">
+      <div class="prose"><h2>Serve the head</h2></div>
+<pre>clm-serve --encoder nemotron-3-embed-1b --ckpt runs/typed-1b/best_head.pt    <span class="dim"># now the default model is clm-latest</span>
+
+r = CLMClient().system_one(state, questions, temperature=T)                  <span class="dim"># T from step 8</span></pre>
+      <p class="note">If you change any option text after training, re-run the evaluation. The head scores whatever text you send, and nothing warns you that the wording drifted.</p>
+    </div>
+  </section>
+
+  <section id="fix" style="display:grid; gap:18px">
+    <div class="prose"><h2>What to change when…</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Symptom</th><th>Likely cause</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td>Raw mode picks the option that shares words with the state</td><td>The retriever rewards lexical overlap</td><td>Reword options around evidence, not topic words; then train a head</td></tr>
+          <tr><td>The right option is usually second</td><td>Two descriptions overlap</td><td>Make them mutually exclusive; split the question or merge the options</td></tr>
+          <tr><td>The head beats the majority baseline only slightly</td><td>Labels depend on facts outside the state, or classes are imbalanced</td><td>Add the missing fields to the state; check per-question accuracy</td></tr>
+          <tr><td>Ranking is good, probabilities are extreme</td><td>Uncalibrated scale</td><td>Fit <code>temperature</code> on validation (step 8)</td></tr>
+          <tr><td>Accuracy drops on long inputs</td><td>The state was truncated from the front</td><td>Move decisive content to the end or trim the boilerplate</td></tr>
+          <tr><td><code>clm-serve</code> refuses the checkpoint</td><td>Trained on another encoder or size</td><td>Serve with the matching <code>--encoder</code>, or retrain</td></tr>
+          <tr><td>Labels are subjective and annotators split</td><td>Hard targets are fighting real ambiguity</td><td>Keep the distributions; train with <code>--targets soft</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">What you can't tune: the encoder's weights, its <code>query:</code> / <code>passage:</code> prompts, and its pooling. Changing any of them means a different encoder profile and newly trained heads.</p>
+  </section>
+
+  <footer>Covers branch <code>encoder-agnostic</code> of the CLM fork in <code>CLM-Piyush</code>. Results are from one run on an Apple M5 Pro with Nemotron-3-Embed-1B; a single test split, not a benchmark.</footer>
+</div>
