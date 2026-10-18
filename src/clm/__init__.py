@@ -16,7 +16,7 @@ from .client import (Answer, Choice, ChoiceAnswer, CLMClient, CLMError, Noul, No
                      ScoreAnswer, SystemOneResponse, Usage)
 from .schema import answer_from_logits, answer_from_probs, build_pairs, candidates, state_text
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["CLMClient", "CLMError", "Noul", "Choice", "Score", "Question", "Answer", "NoulAnswer", "ChoiceAnswer",
            "ScoreAnswer", "SystemOneResponse", "Usage", "Engine", "Embedder", "HeadPair",
            "build_pairs", "candidates", "state_text", "answer_from_logits", "answer_from_probs", "__version__"]

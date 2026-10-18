@@ -240,7 +240,7 @@ clm-train --data LocalLLaMA/typed-decisions --workflow all --encoder nemotron-3-
           <tbody>
             <tr><td><code>--targets soft|hard</code></td><td><code>soft</code></td><td>Use <code>hard</code> only if you have single labels and no annotator distribution.</td></tr>
             <tr><td><code>--loss infonce|softce</code></td><td><code>infonce</code></td><td><code>infonce</code> contrasts against every option text in the batch, which helps when option sets differ between questions. <code>softce</code> only compares a question's own options; try it when one fixed option set dominates.</td></tr>
-            <tr><td><code>--width</code>, <code>--depth</code></td><td>1536, 3</td><td>Smaller (512, 2) for a few hundred examples if validation accuracy peaks early and falls.</td></tr>
+            <tr><td><code>--width</code>, <code>--depth</code></td><td>512, 2 under 3,000 examples; else 1536, 3</td><td>Rarely. The default follows the data size: on 300 examples the larger head swung between 82% and 95% across runs, the smaller one between 88% and 96%.</td></tr>
             <tr><td><code>--epochs</code>, <code>--patience</code></td><td>20, 5</td><td>The best epoch by validation accuracy is kept as <code>best_head.pt</code>; raise patience for noisy labels.</td></tr>
             <tr><td><code>--encoder</code></td><td><code>nemotron-3-embed-8b</code></td><td>Must match the encoder you'll serve with. Heads don't transfer between the 1B and the 8B.</td></tr>
             <tr><td><code>--group-column</code></td><td></td><td>Always, when rows share a customer, account or incident</td></tr>

@@ -743,3 +743,26 @@ select {
 .pill.ok { background: var(--ok-glow); color: var(--ok); }
 .pill.run { background: var(--accent-dim); color: var(--accent); }
 .pill.bad { background: var(--bad-wash); color: var(--bad); }
+
+/* ─────────────────────────── tooltips (tips.js) ─────────────────────────── */
+
+.tip-bubble {
+  position: fixed; z-index: 60; max-width: min(320px, calc(100vw - 16px));
+  padding: 8px 11px; border-radius: 8px;
+  background: var(--text); color: var(--bg);
+  font: 12.5px/1.45 var(--sans); box-shadow: var(--shadow); pointer-events: none;
+}
+.tip-bubble::after {
+  content: ""; position: absolute; left: var(--arrow-x, 50%); width: 8px; height: 8px;
+  background: inherit; transform: translateX(-50%) rotate(45deg);
+}
+.tip-bubble[data-side="below"]::after { top: -4px; }
+.tip-bubble[data-side="above"]::after { bottom: -4px; }
+.tip-q {
+  appearance: none; display: inline-grid; place-items: center; vertical-align: 1px;
+  width: 16px; height: 16px; margin-left: 4px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+  font: 700 10px/1 var(--sans); cursor: help;
+}
+.tip-q:hover, .tip-q:focus-visible { color: var(--accent); border-color: var(--accent-line); outline: none; }
+.lab-txt { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 2px; }

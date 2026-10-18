@@ -55,6 +55,7 @@ class TextCache:
 
 
 EMBED_CHUNK = 256      # texts per encoder call; also how often progress is reported
+SMALL_DATA = 3000      # training questions below which the smaller head is the default
 
 
 def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: str = "data",
@@ -106,7 +107,7 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
     if total:
         if embed_fn is None:
             recipe = Recipe(spec, args.max_len, args.embed_model)
-            backend = make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len,
+            backend = make_backend(args.embed_url, args.embed_model or spec.source(), args.max_len,
                                    args.gpu_mem, args.served_model_name, spec.hidden_size)
             embed_fn = lambda texts, role: backend.embed([recipe.ids(t, role) for t in texts])  # noqa: E731
         for role, keys in todo.items():
@@ -138,8 +139,14 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
 
     data = {k: pack(v) for k, v in ex.items()}
 
-    ck = torch.load(args.init_ckpt, map_location="cpu", weights_only=False) if args.init_ckpt else None
-    cfg = dict(width=args.width or 1536, depth=args.depth or 3, activation="gelu", layernorm=True, residual=False)
+    ck = torch.load(args.init_ckpt, map_location="cpu", weights_only=True) if args.init_ckpt else None
+    torch.manual_seed(args.seed)                 # same seed, same data -> same head
+    # Head size follows the data: on a few hundred examples the 1536x3 head swung from 82% to 95%
+    # across seeds (support-topic sample), while 512x2 stayed within 91-96%; on 5,400 questions
+    # both sizes scored alike.
+    small = len(ex["train"]) < SMALL_DATA
+    cfg = dict(width=args.width or (512 if small else 1536), depth=args.depth or (2 if small else 3),
+               activation="gelu", layernorm=True, residual=False)
     if ck:
         c0 = ck.get("cfg", {})
         check_compatible(checkpoint_encoder(c0), spec, what=f"--init-ckpt {args.init_ckpt}")
@@ -290,7 +297,7 @@ def train_choice(args, train_rows: list[dict], test_rows: list[dict], source: st
             if bad >= args.patience:
                 print(f"[choice] early stop at epoch {ep}", flush=True)
                 break
-    best_ck = torch.load(os.path.join(args.out_dir, "best_head.pt"), map_location="cpu", weights_only=False)
+    best_ck = torch.load(os.path.join(args.out_dir, "best_head.pt"), map_location="cpu", weights_only=True)
     sh.load_state_dict(best_ck["state_head"]); ah.load_state_dict(best_ck["action_head"])
     with torch.no_grad():
         logit_scale.copy_(best_ck["logit_scale"].to(device))

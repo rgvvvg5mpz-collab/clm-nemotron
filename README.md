@@ -1,586 +1,95 @@
-<!-- markdownlint-disable MD001 MD041 -->
-<p align="center">
-  <picture>
-    <img alt="CLM v0.1" src="assets/logo.png" width=45%>
-  </picture>
-</p>
+<p align="center"><img alt="CLM" src="docs/images/logo.png" width="38%"></p>
 
-<h3 align="center">
-Contrastive Language Models
-</h3>
+<h3 align="center">CLM on NVIDIA Nemotron</h3>
+<p align="center"><i>Fast, cheap, private text classification you can train in a browser</i></p>
 
-<p align="center">
-<i>A System One Model for Fast and Generalizable Decision-Making</i>
-</p>
+CLM (Contrastive Language Models) answers typed questions about a text: yes/no, pick one,
+or a level on a scale. An NVIDIA Nemotron embedding model reads the text and never
+changes. A small model on top learns **your** labels from **your** examples, in seconds to
+minutes, and answers in tens of milliseconds on your own machine.
 
-<p align="center">
-| 📄 <a href="https://contrastive-lm.notion.site"><b>Blog</b></a> | 🗣️ <a href="https://discord.gg/5dAQEDJBs"><b>Discord</b></a> | 🤗 <a href="https://huggingface.co/Contrastive-LM"><b>Data &amp; Models</b></a> | 📚 <a href="#api-reference"><b>API Reference</b></a> | 🛠️ <a href="#fine-tuning-clm-on-your-own-data"><b>Fine-Tuning Tutorial</b></a> |
-</p>
-
-🔥 **Contrastive Language Models (CLMs)** are a new class of **System One
-model** trained with a **contrastive learning** objective that connects
-**states and actions**. This repo serves **CLM-8B** behind a
-TypeSafe-compatible API.
-
-- **CLM-8B** is pre-trained on **60M Nemotron Q&A pairs**, mid-trained on
-  **30M synthetic hard negatives**, and post-trained on **1M agentic
-  trajectories**.
-- It performs on par with **Jev** across computer-use, gaming and tool-calling
-  tasks with up to **9× lower latency**. With lightweight fine-tuning it sets a
-  new SOTA as a verifier on agentic coding benchmarks: **Terminal-Bench 2.1
-  (87.6%)** and **DeepSWE (81.6%)**.
-- **States and actions are disaggregated**, so their embeddings are cached and
-  reused independently, which makes training and serving cheap and blazing fast!
-
-We invite the community to plug it into their own agents and benchmarks!
-
-> **This fork runs CLM on NVIDIA Nemotron-3-Embed-8B** (`nvidia/Nemotron-3-Embed-8B-BF16`,
-> built on Mistral AI's Ministral-3-8B, OpenMDW-1.1 licence) as its frozen encoder.
-> The heads are tied to the encoder they were trained on. The results above were measured
-> upstream with a head on a different encoder, so they don't carry over. Serving needs a head
-> trained on Nemotron embeddings ([Fine-tuning](#fine-tuning-clm-on-your-own-data)).
-> `clm-serve` and `train/finetune.py` refuse any head or embedding set from another encoder,
-> or one that records no encoder (every upstream release).
-
----
-
-## Installation
-
-```bash
-pip install contrastive-lm
-```
-
-To install the latest from a clone:
-
-```bash
-pip install -e .
-```
-
----
-
-## Quickstart
-
-### Serve
-
-```bash
-# 1. encoder (Nemotron-3-Embed-8B embeddings; or ./serve_nemotron3_embed_8b.sh)
-vllm serve nvidia/Nemotron-3-Embed-8B-BF16 --served-model-name nemotron-3-embed-8b --runner pooling \
-    --enable-prefix-caching --max-model-len 8192 --port 8090 &
-
-# 2. CLM API on :8700 (no head yet: serves clm-raw)
-clm-serve
-
-# ...later, with a head trained on Nemotron embeddings (see Fine-tuning)
-clm-serve --ckpt runs/typed/best_head.pt
-```
-
-No released head exists for Nemotron yet. Without `--ckpt`, `clm-serve` serves only
-`clm-raw`: plain cosine similarity in Nemotron's own embedding space, with no
-projection head. The API, client and playground all work, and requests without a
-`model` get `clm-raw`. Rankings are often reasonable, because Nemotron is itself a
-query→passage retriever. The probabilities are uncalibrated, though, so treat them
-as an ordering, not a confidence. Typed and agentic questions are where a trained
-head matters most. The typed-decisions fine-tune prints `clm-raw` accuracy next to
-the trained head's on the same test split, so you can see what the head adds.
-`clm-serve` adds Nemotron's `query: ` prompt to states and `passage: ` to candidates.
-
-States are truncated to 8192 tokens, keeping their end, and candidates keep their start.
-Truncation happens in `clm-serve` with the encoder's tokenizer, so the prompt is never cut.
-The model accepts up to 32768 tokens: raise `--max-model-len` on `vllm serve` and
-`clm-serve --max-tokens` together (this needs more GPU memory). On Hopper or Ada GPUs,
-`--quantization fp8_per_tensor` halves the encoder's memory.
-
-### On a Mac (Apple silicon, no vLLM)
-
-vLLM needs Linux and an NVIDIA GPU. On a Mac, `tools/local_embed_server.py` serves the
-encoder with sentence-transformers on the GPU (MPS) behind the same `/v1/embeddings` API.
-The 1B sibling (`nvidia/Nemotron-3-Embed-1B-BF16`, 2.3 GB, 2048-d) fits a laptop comfortably;
-the 8B (16 GB) also loads with `--encoder nemotron-3-embed-8b` on a 32 GB+ machine.
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install -e ".[mac]"
-.venv/bin/python tools/local_embed_server.py --encoder nemotron-3-embed-1b        # :8090
-.venv/bin/clm-serve --encoder nemotron-3-embed-1b                                  # :8700
-```
-
-Train against it with the same `--encoder`:
-`.venv/bin/python train/finetune.py --task choice --encoder nemotron-3-embed-1b --embed-url http://127.0.0.1:8090/v1/embeddings ...`.
-Heads trained on the 1B only work with the 1B; `clm-serve` refuses them with the 8B.
-
-### Ask typed questions about a state
-
-```python
-from clm import CLMClient, Choice, Noul, Score
-
-client = CLMClient()                          # CLM_BASE_URL (default http://127.0.0.1:8700), CLM_API_KEY
-r = client.system_one(
-    state="Customer: my invoice was charged twice and nobody answers the phone!",
-    questions={
-        "urgency": Noul(instructions="Is this urgent?"),
-        "department": Choice(instructions="Which team should handle this?",
-                             criteria={"billing": "Charges, invoices, refunds",
-                                       "technical": "Bugs and outages"}),
-        "frustration": Score(instructions="How frustrated is the customer?",
-                             criteria=["Calm", "Frustrated", "Very angry"]),
-    },
-)
-print(r.answers["urgency"].noul)                # 0.41022     probability the statement is true
-print(r.answers["department"].choice)           # billing
-print(r.answers["department"].probabilities)    # {'billing': 0.93878, 'technical': 0.06122}
-print(r.answers["frustration"].score)           # 1.98386     expected level, 0..2
-print(r.usage.input_tokens, r.latency_ms)       # 38 58.1     (106 tokens on a cold cache: option texts are embedded once)
-```
-
-Questions may be `Noul` / `Choice` / `Score` objects or plain wire-format
-dicts, so a request written for TypeSafe replays as
-`client.system_one(state, questions)`.
-
-### Rank candidates directly
-
-`system_one` is built on one primitive: score a candidate against a state.
-For free-form candidates (best-of-N answers, tool names, next moves) use the
-in-process engine's `rank`:
-
-```python
-from clm import Engine
-
-engine = Engine(emb_url="http://127.0.0.1:8090/v1/embeddings",      # Nemotron-3-Embed-8B by default
-                checkpoint="runs/typed/best_head.pt")                   # a head trained on that encoder
-engine.rank("What causes tides on Earth?",
-            ["The Moon's gravitational pull.", "Photosynthesis in plants.", "Because the Earth is round."])
-# [{'rank': 1, 'candidate': "The Moon's gravitational pull.", 'prob': 0.997}, ...]
-
-engine.answer(state, questions)      # the same dict the HTTP endpoint returns, no server needed
-```
-
----
-
-## Playground
-
-`clm-serve` also serves a web UI at `/` (`http://localhost:8700/` by default).
-Write a state, add typed questions, and see CLM's answer distributions; every
-request is also shown as JSON, `curl` and Python. A **Rank** tab ranks any
-candidate set, and links are shareable.
-
-<p align="center">
-  <picture>
-    <img alt="The CLM playground: a state on the left with three typed questions, their answer distributions on the right"
-         src="assets/playground.png" width=100%>
-  </picture>
-  <br>
-  <sub>Upstream screenshot, captured with a head on a different encoder; Nemotron heads give different numbers.</sub>
-</p>
-
-**Train a model** (the switch in the top bar) trains a classifier on your own labelled
-examples without leaving the browser:
-
-1. Drop in a CSV, JSONL, JSON or Parquet file, or try the bundled sample of 400 support
-   conversations. The text and label columns are picked for you.
-2. Describe what each label means. The model reads these descriptions, and the page flags
-   empty, very short, duplicate or catch-all ones as you type.
-3. Train, and watch progress live.
-4. See the result: accuracy on held-out examples next to the base model and the
-   always-the-most-common-label baseline. Try it on your own text, and open it in the
-   playground.
-
-The trained model is served at once under its own name and comes back after a restart.
-On a Mac with the 1B encoder, the sample trains in about 15 seconds and gets 93% of 100
-held-out conversations right, against 56% without training.
-
-Remote server? `ssh -L 8700:localhost:8700 <host>` (`clm-serve` listens on 127.0.0.1 by default).
-API only: `clm-serve --no-ui`.
-
----
-
-## Results
-
-### Zero-shot evaluation
-
-<p align="center">
-  <img alt="Zero-shot latency and success rate, CLM-8B vs Jev, on T-Rex, BFCL v4 tool calling, WikiRacing and Super Mario" src="assets/zero-shot.png" width=100%>
-</p>
-
-Across **computer-use, gaming and tool-calling tasks**, CLM-8B performs on par
-with Jev while running **up to 9× faster**. The speedups are largest when the
-number of candidate actions is large (WikiRacing) or when actions are reused
-across states (the T-Rex game). The T-Rex benchmark ships in this repo:
-see [examples/t_rex](examples/t_rex/README.md).
-
-### Agentic benchmarks: CLM as a verifier
-
-<p align="center">
-  <img alt="DeepSWE and Terminal-Bench 2.1: success rate and verifier latency, CLM vs Jev" src="assets/agentic.png" width=100%>
-</p>
-
-For each task we sample several candidate solutions (**Opus 5** for DeepSWE,
-**Fable 5** for Terminal-Bench 2.1), and CLM or Jev acts as the verifier that
-picks the best one. Evaluated on **38 held-out DeepSWE tasks** and **30
-held-out Terminal-Bench 2.1 tasks**; latency on an H100. Jev fails to serve as
-a verifier for these long-horizon tasks, scoring below pass@1. With lightweight
-fine-tuning, CLM reaches SOTA on both (**81.6%** and **87.6%**) while running
-**4.1–5.7× faster than Jev**.
-
----
-
-## Fine-tuning CLM on Your Own Data
-
-### Train a classifier: `clm-train`
-
-The quickest way is the playground's **Train a model** view (see [Playground](#playground)).
-The same training runs from the command line, which suits scripts and CI.
-`clm-train` turns labelled examples into a head for `clm-serve`. The encoder stays frozen;
-only the two projection heads are trained. With the encoder from the quickstart running:
-
-```bash
-# text + label rows (CSV / JSONL / JSON / parquet), one question for every row
-clm-train --data tickets.csv --question "Which team should handle this?" \
-    --options '{"billing": "A charge, invoice, refund or payment problem.",
-                "technical": "The product is broken, erroring or down."}' \
-    --group-column customer --out runs/tickets
-
-# typed rows: several questions per state (file, directory or Hub dataset)
-clm-train --data LocalLLaMA/typed-decisions --workflow all --out runs/typed
-
-clm-serve --ckpt runs/tickets/best_head.pt
-```
-
-It holds out a test split (from `--test`, a `split` column, or `--test-frac`, by
-`--group-column` when given). It embeds each text once into a cache, keeps the epoch with
-the best validation accuracy, and prints the head's test accuracy next to `clm-raw` and the
-majority label. On a Mac with the 1B encoder, 300 labelled customer conversations trained in
-16 s and reached 95% test accuracy, against 56% for `clm-raw` and 18% for the majority label.
-Data formats, every option and the errors are in [docs/TRAINING.md](docs/TRAINING.md).
-
-Heads train from scratch on Nemotron (the default `--encoder`). There is no Nemotron warm
-start yet, and upstream embedding datasets were built with a different encoder, so they are
-refused.
-
-### Agent trajectories: `train/finetune.py --task clm`
-
-```bash
-# agentic step traces (state / action / task_id / step_idx / reward per line), e.g. your own DeepSWE runs
-python train/finetune.py --task clm --data traces.jsonl \
-    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
-    --holdout-tasks heldout_tasks.json --out-dir runs/agentic
-```
-
-Then score best-of-N on held-out tasks with the matching embeddings
-(`finetune.py` caches them under `runs/agentic/embeddings/`):
-
-```bash
-python evaluation/bon_eval.py --embeddings-dir runs/agentic/embeddings/<dir> \
-    --checkpoint runs/agentic/best_head.pt --tasks-file heldout_tasks.json --n 4 --window 12
-```
-
-To share a trained head, upload it to a Hub model repo; `clm-download --repo <user>/<repo>
---file best_head.pt` fetches it to `~/.cache/clm/`.
-
----
-
-## How it works
-
-### About
-
-CLM first trains a **state encoder** and an **action encoder** on a
-large-scale dataset with a contrastive objective (InfoNCE), so that each state
-is pulled toward the ground-truth action that was taken and pushed away from
-all others. The two encoders then serve directly as a zero-shot action
-classifier: at deployment, given the current state and a set of candidate
-actions, CLM scores each action by how well its embedding aligns with the
-state embedding and selects the highest-scoring action.
-
-That is what this package serves. A typed question is a state plus a closed
-set of candidate actions (the options and their descriptions); a softmax over
-CLM's scores *is* the answer distribution, and the same call ranks best-of-N
-trajectories, routes tools, shortlists retrieval pools and answers typed
-decisions with no per-task setup.
-
-**Architecture, data recipe and scaling laws:**
-
-- Each encoder is a frozen LLM backbone plus a 20M-parameter trainable
-  projection head, so inference is one
-  embedding per fresh text and a dot product per cached candidate.
-- CLM is **pre-trained** on internet-scale Q&A, **mid-trained** on synthetic
-  hard negatives, **post-trained** on agentic traces, and can be easily
-  fine-tuned on downstream tasks ([data recipe](#data-recipe)).
-- The InfoNCE loss **decreases predictably as a power law** in training
-  compute, model size and dataset size ([details](#scaling-laws-for-verification)).
-
-```
-browser ──► clm-serve  (CPU, :8700)   GET / (playground)
-client  ──►                          POST /v1/systemone · GET /v1/models · GET /health
-               │       state head + action head (20M params, hot-reloaded), embedding cache
-               ▼
-          vLLM Nemotron-3-Embed-8B pooling server (GPU, :8090)   /v1/embeddings
-```
-
-### Training Algorithm
-
-CLM is trained with a bidirectional InfoNCE loss. Given a batch of $B$
-matched state–action pairs, we compute a $B \times B$ similarity matrix and,
-for each positive pair $(s_i, a_i)$, optimize retrieval in both directions
-($s_i \rightarrow a_i$ and $a_i \rightarrow s_i$):
-
-```math
-L_{\mathrm{CLM}} = -\frac{1}{2B}\sum_i \left[ \log \frac{\exp\left(s_i^\top a_i/\tau\right)} {\sum_j \exp\left(s_i^\top a_j/\tau\right)} + \log \frac{\exp\left(a_i^\top s_i/\tau\right)} {\sum_j \exp\left(a_i^\top s_j/\tau\right)} \right]
-```
-
-For mid-training, the objective is extended with hard negatives. Let
-$h_{ik}^{(a)}$ denote a hard negative action for state $s_i$; the
-state-to-action direction becomes
-
-```math
-L_{s \rightarrow a}^{\mathrm{hard}}=-\frac{1}{B}\sum_i\log\frac{\exp\left(s_i^\top a_i / \tau\right)}{\exp\left(s_i^\top a_i / \tau\right)+\sum_k\exp\left(s_i^\top h_{ik}^{(a)} / \tau\right)}.
-```
-
-### Scaling Laws for Verification
-
-The test InfoNCE loss $L$ scales as a power law with training compute $C$,
-dataset size $D$, projection-head size $N$ and encoder size
-$N_{\mathrm{enc}}$. These dimensions must be scaled jointly for the best
-verification performance; when a scale factor is not bottlenecked by the
-others, the dependence on each variable $`X \in \{C, D, N, N_{\mathrm{enc}}\}`$
-is
-
-```math
-L(X) \approx \left(\frac{X_c}{X}\right)^{\alpha_X},
-```
-
-where $X_c$ is a fitted scale constant and $\alpha_X$ the corresponding
-scaling exponent, following Kaplan et al. Scaling the encoder size yields the
-strongest gains. Experiments are conducted on the Nemotron DQA dataset and
-evaluated on a held-out set; the fits and figures are in the
-[blog post](https://contrastive-lm.notion.site).
-
-**Data vs. optimal model size.** At a fixed compute budget, each iso-FLOP
-curve of test loss against head size is well approximated by a parabola in
-log-parameter space, and its minimum gives the optimal head size for that data
-budget. The optimum grows almost exactly linearly with the number of training
-tokens, $N^* \propto D^{1.02}$, at roughly **310 tokens per parameter**.
-
-### Data Recipe
-
-CLM is trained in three stages, each a progressively harder form of
-state–action alignment:
-
-1. **Pre-training** on **~60M Nemotron DQA question–answer pairs**, each
-   question the state and its answer the action. This learns broad semantic
-   representations.
-2. **Mid-training** on **~30M synthetic hard negatives** generated by Gemini
-   2.5 Flash-Lite: semantically similar but incorrect answers to Nemotron DQA
-   questions, added to the InfoNCE loss as above. This develops fine-grained
-   discrimination between plausible actions.
-3. **Post-training** on **~1M agent trajectories** from the Agent Data
-   Protocol (ADP) dataset, plus terminal traces from Endless-Terminals and
-   LiteCoder-Terminal-SFT. Each trajectory step is a state–action pair: the
-   agent's current context and the decision it took.
-
-**Replay during post-training.** 40% of the post-training mixture is Nemotron
-DQA replay and 60% agentic trajectories. With replay, Nemotron hard-negative
-top-1 accuracy only moves from 69% to 68.5%; training on agentic data alone for
-the same number of agentic steps drops it to 56.2%.
-
-**Why not train on hard negatives from the start?** On ~100K held-out
-questions (one gold answer, 10 hard negatives each), pre-training alone reaches
-**52.1%** top-1 without seeing a hard negative, and a short mid-training stage
-lifts it to **69.2%**. Training with hard negatives from the start improves
-quickly but peaks at **62.4%** before overfitting, so the two-stage recipe is
-**7 points better** at a fixed budget: hard negatives work best as a refinement
-on top of pre-training, not a substitute for it.
-
-There is no default head in this fork. Any head in the CLM checkpoint format,
-trained on the configured encoder, can be served with `--ckpt`. The format is a `torch.save` dict with `state_head` /
-`action_head` state dicts, `logit_scale` and `cfg` (`width`, `depth`,
-`projection_dim`, `activation`, `layernorm`, `residual`, `hidden_size`,
-`encoder`). A head only makes sense with the encoder it was trained against.
-`cfg["encoder"]` records that encoder, and `clm-serve` refuses a mismatch or a
-checkpoint that records none (upstream releases).
-
----
-
-## Roadmap
-
-1. **Scaling experiments:** larger backbones, and how far verification
-   performance keeps scaling.
-2. **Vision and multimodal support:** images, video and other modalities for
-   robotics and computer-use tasks.
-3. **Scaling the data recipe:** more pre-training, hard-negative mining and
-   agentic post-training.
-
----
-
-## Citation
-
-If you find CLM useful, please consider citing it:
-
-```bibtex
-@misc{kwok2026contrastivelanguagemodels,
-  title={Contrastive Language Models},
-  author={Jacky Kwok and Hangoo Kang and Tarun Suresh and Jon Saad-Falcon and Marco Pavone and Christopher Ré and Azalia Mirhoseini},
-  year={2026},
-  note={Notion Blog},
-  url={https://contrastive-lm.notion.site}
-}
-```
-
-## License
-
-The code in this repository is released under the [Apache 2.0 License](LICENSE). The default encoder, Nemotron-3-Embed-8B, is under NVIDIA's OpenMDW-1.1 licence.
-
----
-
-## Directory Structure
-
-```
-.
-├── pyproject.toml               # the clm package (installed editable by requirements.txt)
-├── serve_nemotron3_embed_8b.sh  # launch the Nemotron-3-Embed-8B encoder on a GPU (default)
-├── assets/                      # logo + the playground screenshot used above
-├── src/clm/                     # inference: the package `clm-serve` and `clm` ship
-│   ├── __init__.py              #   from clm import CLMClient, Noul, Choice, Score, Engine
-│   ├── client.py                #   CLMClient + question / answer types (no torch needed)
-│   ├── schema.py                #   question -> (state text, candidate texts); logits -> Answer
-│   ├── engine.py                #   Engine.answer(...) / Engine.rank(...): the inference engine
-│   ├── encoders.py              #   encoder profiles: prompts, truncation, checkpoint compatibility
-│   ├── heads.py                 #   head architecture, checkpoint load / hot-reload / download
-│   ├── embedder.py              #   /v1/embeddings client + LRU cache of normalised embeddings
-│   ├── cache.py                 #   the reserved vector arena behind --action-cache
-│   ├── server.py                #   FastAPI app, `clm-serve`
-│   ├── train_cli.py             #   `clm-train`: train a head from labelled rows
-│   ├── trainer.py               #   the head-training loop (clm-train, finetune.py --task choice)
-│   ├── typed_data.py            #   read CSV/JSONL/parquet rows, text+label -> typed, group splits
-│   ├── embed_backends.py        #   training-side embedding (encoder server or in-process vLLM)
-│   └── static/                  #   the playground: index.html + app.css + app.js, no build step
-├── tools/playground_mock.py     # serve the playground without a GPU (fake encoder)
-├── tools/local_embed_server.py  # /v1/embeddings on Apple silicon / CPU (sentence-transformers)
-├── train/                       # fine-tuning
-│   ├── finetune.py              #   trains the projection heads on a frozen encoder
-│   ├── adapters.py              #   dataset adapters: agentic traces, typed decisions
-│   └── embed_utils.py           #   encoder embeddings with the training token recipe
-├── evaluation/bon_eval.py            # unified best-of-N evaluation
-├── preprocessing/hf_embeddings.py    # embedding dir <-> Hugging Face dataset
-├── requirements.txt             # pip install -r requirements.txt  (clm + torch + vLLM + example deps)
-├── examples/                    # CLM vs Jev on the T-Rex runner (examples/t_rex/README.md)
-│   ├── common.py                #   one client for both endpoints: retries, latency, cache
-│   └── t_rex/                   #   Chrome dinosaur game in real time (run.py --model clm|jev)
-├── tests/                       # pytest tests/  (no GPU needed)
-├── docs/TRAINING.md             # clm-train: data formats, options, outputs, errors
-├── docs/site/                   # architecture, classification guide and training pages (HTML)
-└── docs/FINETUNING.md           # upstream's instructions for an agent-run fine-tuning loop
-```
-
-This branch carries the inference package, the playground, the fine-tuning script,
-the T-Rex example.
-The scaling experiments, data pipelines and paper figures
-live in the research repo's `main` branch.
-
----
-
-## API Reference
-
-### `POST /v1/systemone`
-
-| field | |
+| Measured on a laptop (Apple M5 Pro) | |
 | --- | --- |
-| `state` | string, object or array (objects are rendered as `key: value` text, arrays as `- item` lines; never JSON, the heads are trained on prose) |
-| `model` | `clm-latest`, `clm-raw`, or any model from `GET /v1/models`; default `clm-latest`, or `clm-raw` when no head is served |
-| `questions` | `{id: Question}`, at least one |
-| `temperature` | optional, `(0, 100]`, default 1; divides the logits before the softmax |
+| Accuracy, support-ticket routing, trained on 300 examples | **88–96%** on unseen tickets (57% untrained, 18% guessing) |
+| Latency | **33 ms** median, 43 ms p95, per request |
+| Throughput | **36** requests/s per laptop (about 3 million a day) |
+| Cost per million decisions | about **$8** of compute, against $58–$2,320 for frontier models at list price |
 
-| question | required | answer |
+Demo figures on synthetic data. Sources and caveats: [`Model Governance/04-evaluation.md`](Model%20Governance/04-evaluation.md).
+
+## Start
+
+**With Claude Code** (all you need): clone, open Claude Code in the folder, and type
+**start the service**. It installs everything, downloads the models from this repo's
+release and starts CLM. Then open <http://localhost:8700/>.
+
+```bash
+git clone https://github.com/rgvvvg5mpz-collab/clm-nemotron.git
+```
+
+**Without Claude Code:**
+
+```bash
+bash "Claude Code/scripts/start.sh"
+```
+
+Needs macOS (Apple silicon) or Linux, Python 3.10+, about 8 GB of free memory and 6 GB of
+disk. No GPU required. Details: [`Claude Code/README.md`](Claude%20Code/README.md).
+
+## Use it
+
+- **Playground** (<http://localhost:8700/>): ask questions about any text with the shipped
+  or your own models, and rank candidates. Every control has a tooltip.
+- **Train a model** (switch at the top): upload a CSV of labelled examples, describe the
+  labels, train, and check the results against two baselines. The model is served at once.
+- **From code:** the same HTTP API, via the Python client or curl.
+
+```python
+from clm import CLMClient
+r = CLMClient("http://localhost:8700").system_one(
+    state="customer: my parcel never arrived",
+    questions={"label": {"type": "choice", "instructions": "What is this conversation about?",
+                         "criteria": {"billing": "A charge, invoice or payment problem.",
+                                      "delivery": "Shipping or delivery of a physical item."}}},
+    model="support-topic-1b")
+print(r.answers["label"].choice)        # delivery
+```
+
+## What's in this repository
+
+| Folder | For | Start with |
 | --- | --- | --- |
-| `noul` | `instructions`; optional `criteria: {"true": …, "false": …}` | `{"noul": p_true}` |
-| `choice` | `instructions` (the question), `criteria: {option: description}` (each option is embedded as its description, or its key when the description is empty) | `{"choice", "confidence", "probabilities"}` |
-| `score` | `instructions`, `criteria: [level0, level1, …]` (ordered, ≥2) | `{"score", "confidence", "legend", "probabilities"}` |
+| [`docs/`](docs/) | Everyone | [User guide](docs/USER_GUIDE.md) (step by step, with screenshots) · [Training](docs/TRAINING.md) · [API](docs/API.md) · [Research background](docs/RESEARCH.md) |
+| [`Crew Training/`](Crew%20Training/) | New users and trainers | The 5-minute training video, exercises and a knowledge check |
+| [`Marketing/`](Marketing/) | Executives | The briefing deck and 3-minute video (2:51): cost, accuracy, latency against frontier models |
+| [`Model Governance/`](Model%20Governance/) | Risk, compliance, architecture | Architecture, model inventory and cards, data lineage, evaluation, risks, sourcing policy |
+| [`Claude Code/`](Claude%20Code/) | Developers and operators | Runbook and scripts: setup, start, stop, status, tests, model release |
+| `src/clm/` | Developers | The package: `clm-serve`, `clm-train`, the engine and the playground |
+| `tools/` | Developers | The encoder server for Macs and CPUs; a mock playground server |
+| `train/`, `evaluation/`, `preprocessing/` | Researchers | Agent-trace training, best-of-N and service benchmarks, dataset tools |
+| `tests/` | Developers | `bash "Claude Code/scripts/test.sh"`: no GPU or network needed; CI runs it on every push |
 
-- `confidence` = top probability minus the mean of the others.
-- `score` = expected level index; `legend` maps indices back to the rubric.
-- `usage.input_tokens` counts encoder tokens spent on cache misses;
-  `billing_units` is the number of questions.
-- Errors: `401` bad key · `422` malformed request or unknown model · `502`
-  embedder unreachable. `X-CLM-Latency-Ms` carries the server-side time.
+## Models
 
-### `POST /v1/rank`
+The repository is standalone: the models ship as assets of the GitHub release
+[`models-v1`](https://github.com/rgvvvg5mpz-collab/clm-nemotron/releases/tag/models-v1).
+They are verified by checksum on download and never fetched from third parties at run time.
 
-The same primitive in its plain form: `{"context": ..., "question": ..., "answers": [...]}`
-returns `{"model", "ranked": [{"rank", "candidate", "prob"}, ...]}`, best first. The
-state head sees `context + question`, the action head sees each answer verbatim.
-`CLMClient.rank(context, question, answers)` and `Engine.rank(context, answers, question)`
-are the client and in-process forms.
+| Model | What | Status |
+| --- | --- | --- |
+| `nemotron-3-embed-1b` | NVIDIA Nemotron-3-Embed-1B encoder (OpenMDW-1.1), built on Mistral AI's Ministral 3 | Default; in the release |
+| `nemotron-3-embed-8b` | The 8B encoder, for NVIDIA GPU servers | Optional; from Hugging Face |
+| `support-topic-1b` | Routes support conversations to 5 topics | Demo |
+| `typed-decisions-1b` | Answers 15 business questions across 4 workflows | Demo |
 
-### `GET /`
+The demo models were trained on synthetic data labelled by a model. Read
+[Model Governance](Model%20Governance/README.md) before using any model for real decisions.
 
-The playground (see [above](#playground)), unless `clm-serve --no-ui`. Static
-files only; every API route above shadows it.
+## Credits and licence
 
-### `GET /v1/models`
-
-```json
-{"models": [{"name": "clm-latest", "description": "...", "release_date": "2026-09-19"},
-            {"name": "clm-raw", "description": "Cosine in the raw encoder embedding space, no projection head; ...", ...}]}
-```
-
-### `clm-serve` options
-
-```
-clm-serve [--port 8700] [--encoder nemotron-3-embed-8b|nemotron-3-embed-1b]
-          [--emb-url http://127.0.0.1:8090/v1/embeddings] [--emb-model NAME]
-          [--max-tokens 8192] [--ckpt PATH] [--ckpt-dir DIR] [--model NAME=PATH ...] [--device cpu|cuda]
-          [--action-cache 0.02|512MiB|0] [--host 127.0.0.1] [--runs-dir DIR] [--no-train] [--no-ui] [--cors]
-```
-
-`--encoder` names the frozen encoder behind `--emb-url`. It sets the
-prompts, the token budget and the expected width, and heads trained on
-any other encoder are refused. `--emb-model` defaults to the encoder's name.
-`--ckpt PATH` (or `CLM_CKPT`) serves a head as `clm-latest`; there is no default.
-`--ckpt-dir DIR` serves every
-`*.pt` there under its file stem; `--model NAME=PATH` adds one more.
-The heads run on the GPU when torch sees one, else on the CPU; `--device` (or
-`CLM_DEVICE`) forces one. Checkpoints hot-reload when the file changes. Set `CLM_API_KEY` to require
-`Authorization: Bearer <key>` (the playground has a field for it). Environment
-equivalents: `CLM_ENCODER`, `CLM_PORT`, `CLM_EMB_URL`, `CLM_EMB_MODEL`, `CLM_EMB_MAX_TOKENS`, `CLM_CKPT`,
-`CLM_DEVICE`, `CLM_ACTION_CACHE`.
-
-`--runs-dir` (default `~/.cache/clm/runs`, or `CLM_RUNS_DIR`) is where models trained in the
-playground are kept. Each one is served again when `clm-serve` restarts, provided it was
-trained on the same encoder. `--no-train` turns the Train view and the `/v1/train/*` routes off.
-`--host` defaults to `127.0.0.1`. Pass `0.0.0.0` to expose the API, file uploads and training
-to the network, and then set `CLM_API_KEY`.
-
-`--no-ui` drops the playground and serves the API alone. `--cors` allows browser
-requests from any origin and is off by default, because an API key otherwise
-travels in a header any page would then be free to send.
-
-#### The vector cache
-
-An agent asks about a changing state but a mostly fixed set of actions, and it
-revisits states it has already seen. Neither their embeddings nor their
-projections change while the head does not, so `clm-serve` reserves a slab of
-device memory at start-up — the way vLLM claims its KV cache — and keeps them in
-it:
-
-```
-[clm] vector cache 505.0 MB reserved on cuda (215,764x512d + 3,852x4096d)
-```
-
-`--action-cache` takes a fraction of the device (`0.02`, the default), an
-absolute size (`512MiB`), or `0` to switch it off; `CLM_ACTION_CACHE` does the
-same. It covers states and actions on every served head, and `clm-raw` in the
-encoder's own space — the two widths are pools carved from the one allocation,
-which never grows, so a long-running server cannot drift into an out-of-memory
-kill. Entries are keyed by head and generation, so several heads share the arena
-and a hot-reloaded head stops matching rows its previous weights produced;
-eviction is least-recently-used. `GET /health` reports occupancy and hit rate.
-
-A hit skips the encoder call, the host-to-device copy and the head's forward
-pass. Measured on one RTX 4090, server-side p50, against a fixed action set:
-
-| | 3 actions | 50 actions |
-|---|---|---|
-| new state every call | 28.6 → 28.0 ms | 28.8 → 28.1 ms |
-| revisited states (20 rooms) | 1.7 → 0.6 ms | 2.0 → 0.7 ms |
-| one repeated state | 1.7 → 0.6 ms | 2.0 → 0.7 ms |
-
-So a loop that revisits states answers about 2.8x faster, and a loop that never
-repeats itself pays the encoder either way. A cached vector costs no encoder
-tokens, so `usage.input_tokens` counts only what the encoder actually did.
+A fork of [Contrastive-LM/CLM](https://github.com/Contrastive-LM/CLM) by Jacky Kwok, Hangoo
+Kang, Tarun Suresh, Jon Saad-Falcon, Marco Pavone, Christopher Ré and Azalia Mirhoseini.
+This fork runs on NVIDIA's encoders instead of upstream's, adds training in the browser, a
+model release, and the folders above. The method and upstream results are described in
+[docs/RESEARCH.md](docs/RESEARCH.md). Code: Apache-2.0 ([LICENSE](LICENSE)). The Nemotron
+encoder ships under OpenMDW-1.1, with its licence and notices inside the release archive.

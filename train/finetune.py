@@ -141,7 +141,7 @@ def clm_embedding_dir(args) -> str:
         return out
     recs = adapters.read_transitions(args.data)
     recipe = embed_utils.Recipe(spec, args.max_len, args.embed_model)
-    backend = embed_utils.make_backend(args.embed_url, args.embed_model or spec.hf_id, args.max_len, args.gpu_mem,
+    backend = embed_utils.make_backend(args.embed_url, args.embed_model or spec.source(), args.max_len, args.gpu_mem,
                                        args.served_model_name, spec.hidden_size)
     print(f"[clm] embedding {len(recs)} steps from scratch with {spec.hf_id}", flush=True)
     se = backend.embed([recipe.ids(r["state"], "state") for r in recs])

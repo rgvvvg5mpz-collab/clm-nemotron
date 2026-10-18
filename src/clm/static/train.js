@@ -170,7 +170,7 @@ function renderData() {
   let html = `<div class="file-chip">
       <span class="name">${esc(u.filename)}</span>
       <span class="meta-txt">${fmtInt(u.rows)} rows · ${u.columns.length} columns${u.has_split ? ' · has a split column' : ''}</span>
-      <button type="button" class="btn-ghost small" id="t-change">Use a different file</button>
+      <button type="button" class="btn-ghost small" id="t-change" data-tip="Start over with another file. Nothing is trained until you press Train.">Use a different file</button>
     </div>`;
 
   if (isTyped()) {
@@ -185,11 +185,11 @@ function renderData() {
 
   const cols = u.columns.filter((c) => c !== 'split');
   html += `<div class="col-pickers">
-      <label>Text to classify ${colSelect('t-text-col', T.textCol, cols, 'Choose a column')}
+      <label><span class="lab-txt">Text to classify${tipQ('The column the model reads, such as the message or ticket body. Highlighted in teal in the preview.')}</span> ${colSelect('t-text-col', T.textCol, cols, 'Choose a column')}
         <small>What the model reads.</small></label>
-      <label>Correct label ${colSelect('t-label-col', T.labelCol, cols, 'Choose a column')}
+      <label><span class="lab-txt">Correct label${tipQ('The column with the right answer for each row. Highlighted in red in the preview. Each different value becomes one label.')}</span> ${colSelect('t-label-col', T.labelCol, cols, 'Choose a column')}
         <small>The answer you want it to learn.</small></label>
-      <label>Group by <span class="opt">(optional)</span> ${colSelect('t-group-col', T.groupCol, cols, 'None')}
+      <label><span class="lab-txt">Group by <span class="opt">(optional)</span>${tipQ('If several rows come from the same customer, account or case, pick that column. Their rows then stay together, so the test never contains near-copies of training rows and the score is honest.')}</span> ${colSelect('t-group-col', T.groupCol, cols, 'None')}
         <small>For example a customer ID, so one customer's rows never end up in both training and testing.</small></label>
     </div>`;
 
@@ -202,7 +202,7 @@ function renderData() {
   if (counts) {
     const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     html += `<div class="chips" aria-label="Labels and how many examples each has">${entries.map(([k, n]) =>
-      `<span class="chip${n < 10 ? ' is-low' : ''}"><b>${esc(k)}</b><span>${fmtInt(n)}</span></span>`).join('')}</div>`;
+      `<span class="chip${n < 10 ? ' is-low' : ''}" data-tip="${fmtInt(n)} example${n === 1 ? '' : 's'} labelled “${esc(k)}”${n < 10 ? '. Too few to learn from reliably.' : '.'}" tabindex="0"><b>${esc(k)}</b><span>${fmtInt(n)}</span></span>`).join('')}</div>`;
     const low = entries.filter(([, n]) => n < 10).map(([k]) => k);
     if (low.length) tips.push(['warn', `${low.map((k) => `“${esc(k)}”`).join(', ')} ${low.length === 1 ? 'has' : 'have'} fewer than 10 examples. Aim for 30 or more per label, or the model will rarely pick ${low.length === 1 ? 'it' : 'them'}.`]);
     const top = entries[0][1] / u.rows;
@@ -267,20 +267,20 @@ function renderQuestion() {
     return `<div class="opt-row">
         <div class="opt-key"><b>${esc(k)}</b><span>${fmtInt(countOf(k))} examples</span></div>
         <div class="opt-input">
-          <input type="text" id="t-opt-${esc(k)}" data-key="${esc(k)}" value="${esc(T.options[k] || '')}" placeholder="${esc(ph)}" aria-label="Description of ${esc(k)}">
+          <input type="text" id="t-opt-${esc(k)}" data-key="${esc(k)}" value="${esc(T.options[k] || '')}" placeholder="${esc(ph)}" aria-label="Description of ${esc(k)}" data-tip="The model compares each example with this description. Use the words and situations that appear in “${esc(k)}” examples.">
           <span class="opt-hint ${cls}" id="t-hint-${esc(k)}">${esc(hint)}</span>
         </div>
       </div>`;
   }).join('');
   box.innerHTML = `
-    <label class="q-field"><span>What question do the labels answer?</span>
+    <label class="q-field"><span>What question do the labels answer?${tipQ('Asked about every example; the labels are its possible answers. It is added after each text, exactly as when you use the model later.')}</span>
       <input type="text" id="t-q" value="${esc(T.question)}" placeholder="${esc(qPlaceholder)}">
       <small>${T.kind === 'noul' ? 'Write it as a statement that is true or false for each example.' : 'Asked about every example; the answer is one of your labels.'}</small>
     </label>
     <div class="q-field"><span>Kind of answer</span>
       <div class="kind" role="group" aria-label="Kind of answer">
-        <button type="button" data-kind="choice" class="${T.kind === 'choice' ? 'is-active' : ''}" aria-pressed="${T.kind === 'choice'}">Pick one label</button>
-        <button type="button" data-kind="noul" class="${T.kind === 'noul' ? 'is-active' : ''}" aria-pressed="${T.kind === 'noul'}"${canNoul ? '' : ' disabled title="Only for labels that are true/false or yes/no"'}>Yes or no</button>
+        <button type="button" data-kind="choice" class="${T.kind === 'choice' ? 'is-active' : ''}" aria-pressed="${T.kind === 'choice'}" data-tip="Each example has exactly one of your labels.">Pick one label</button>
+        <button type="button" data-kind="noul" class="${T.kind === 'noul' ? 'is-active' : ''}" aria-pressed="${T.kind === 'noul'}" data-tip="${canNoul ? 'Each example is either true or false for your statement.' : 'Only available when the labels are true/false or yes/no.'}"${canNoul ? '' : ' disabled'}>Yes or no</button>
       </div>
     </div>
     <div class="opt-list">${rows}</div>
@@ -320,7 +320,7 @@ function splitSentence() {
   const u = T.upload;
   if (u.has_split) return 'Trains on your file\'s <b>train</b> rows and tests on its <b>test</b> rows.';
   const test = Math.round(u.rows * T.testFrac);
-  return `Holds back <b>${fmtInt(test)}</b> of ${fmtInt(u.rows)} examples (${pct0(T.testFrac)}) for testing.
+  return `Holds back <b>${fmtInt(test)}</b> of ${fmtInt(u.rows)} examples (${pct0(T.testFrac)}) for testing${tipQ('Held-out examples: never shown to the model while training, so its score on them shows how it will do on new data.')}.
     The model never sees them while training, so the score reflects new data.${T.groupCol ? ` Rows with the same <b>${esc(T.groupCol)}</b> stay together.` : ''}`;
 }
 
@@ -332,23 +332,23 @@ function renderTrainBox() {
   const suggested = slug((T.upload && T.upload.filename.replace(/\.[^.]+$/, '')) || T.question || 'model');
   if (!T.nameTouched) T.name = suggested;
   box.innerHTML = `<div class="train-box">
-      <label class="q-field"><span>Model name</span>
+      <label class="q-field"><span>Model name${tipQ('Letters, numbers and dashes. If the name is taken, a number is added.')}</span>
         <input type="text" id="t-name" value="${esc(T.name)}" spellcheck="false">
         <small>How you'll pick it in the playground and the API.</small>
       </label>
       <p class="split-line">${splitSentence()}</p>
-      <details class="adv"><summary>Settings</summary>
+      <details class="adv"><summary data-tip="Optional: how much to hold back for testing, and how long to train. The defaults suit most data.">Settings</summary>
         <div class="adv-grid">
-          <label>Held out for testing
+          <label><span class="lab-txt">Held out for testing${tipQ('Share of examples set aside before training and used only to score the finished model. More gives a steadier score; less leaves more to learn from.')}</span>
             <select id="t-test-frac"${T.upload.has_split ? ' disabled title="Your file\'s split column decides this"' : ''}>
               ${[0.1, 0.2, 0.3].map((f) => `<option value="${f}"${f === T.testFrac ? ' selected' : ''}>${pct0(f)}</option>`).join('')}
             </select></label>
-          <label>Training rounds (at most)
+          <label><span class="lab-txt">Training rounds (at most)${tipQ('Each round goes over all training examples once. Training stops early when the check set stops improving, and the best round is kept.')}</span>
             <select id="t-epochs">${[10, 20, 40].map((n) => `<option value="${n}"${n === T.epochs ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
         </div>
       </details>
       <div class="actions">
-        <button type="button" class="btn-primary" id="t-go"${problems.length ? ' disabled' : ''}>${T.job && T.job.status === 'done' ? 'Train again' : 'Train model'}</button>
+        <button type="button" class="btn-primary" id="t-go"${problems.length ? ' disabled' : ''} data-tip="${problems.length ? esc(problems[0]) : 'Start training on this server. You can keep using the playground meanwhile.'}">${T.job && T.job.status === 'done' ? 'Train again' : 'Train model'}</button>
         <span class="why-not">${problems.length ? esc(problems[0]) : 'Usually a few minutes; the encoder does most of the work.'}</span>
       </div>
     </div>`;
@@ -469,8 +469,8 @@ function renderProgress() {
       <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(frac * 100)}"><div style="width:${(frac * 100).toFixed(1)}%"></div></div>
       <div class="pline"><span>${esc(left)}</span><span>${elapsed(j)}</span></div>
       ${sparkline(j.history || [], base)}
-      ${base !== undefined && (j.history || []).length > 1 ? '<p class="note">Dashed line: the base model without training, on the same check set.</p>' : ''}
-      <div class="actions"><button type="button" class="btn-ghost" id="t-stop">Stop training</button></div>
+      ${base !== undefined && (j.history || []).length > 1 ? `<p class="note">Dashed line: the base model without training, on the same check set.${tipQ('The check set is 10% of the training examples, used to pick the best round. It is separate from the test examples, which are used only once, at the end.')}</p>` : ''}
+      <div class="actions"><button type="button" class="btn-ghost" id="t-stop" data-tip="Stop now. Nothing is saved, and you can train again.">Stop training</button></div>
     </div>`;
   $('#t-stop').addEventListener('click', async () => {
     try { T.job = await api('POST', `/v1/train/jobs/${encodeURIComponent(j.id)}/stop`); toast('Stopping…'); }
@@ -523,12 +523,13 @@ function renderResults() {
   const typed = !j.question;
   let html = `<div class="verdict${weak ? ' is-weak' : ''}">
       <div class="big">${weak ? 'Only ' : 'Gets '}<em>${pct0(r.test_acc)}</em> right</div>
-      <p>on ${fmtInt(n)} held-out example${n === 1 ? '' : 's'} it never saw while training${band ? ` (give or take about ${band} points by chance)` : ''}. Model <code>${esc(j.model)}</code>, trained in ${r.minutes < 1 ? Math.max(1, Math.round(r.minutes * 60)) + ' seconds' : r.minutes.toFixed(1) + ' minutes'}.</p>
+      <p>on ${fmtInt(n)} held-out example${n === 1 ? '' : 's'} it never saw while training${band ? ` (give or take about ${band} points by chance${tipQ(`With ${n} test examples, the score can move by about ${band} points by chance alone. Compare models only on bigger differences.`)})` : ''}. Model <code>${esc(j.model)}</code>, trained in ${r.minutes < 1 ? Math.max(1, Math.round(r.minutes * 60)) + ' seconds' : r.minutes.toFixed(1) + ' minutes'}.</p>
     </div>
     <div class="cmp" aria-label="Accuracy compared with two baselines">
-      ${[['Your trained model', r.test_acc, true], ['Base model, no training', r.raw_test, false],
-         ['Always the most common label', r.majority_test, false]].map(([lab, v, me]) =>
-        `<div class="cmp-row${me ? ' is-model' : ''}"><span class="lab">${lab}</span><div class="cmp-track"><div class="cmp-fill" style="width:${(v * 100).toFixed(1)}%"></div></div><span class="val">${pct0(v)}</span></div>`).join('')}
+      ${[['Your trained model', r.test_acc, true, 'Your model, scored on the held-out test examples.'],
+         ['Base model, no training', r.raw_test, false, 'The Nemotron encoder alone, comparing each text with your label descriptions (clm-raw). Shows what training added.'],
+         ['Always the most common label', r.majority_test, false, 'What you would get by always answering with the most frequent label. A useful model must clearly beat this.']].map(([lab, v, me, tip]) =>
+        `<div class="cmp-row${me ? ' is-model' : ''}" data-tip="${tip}" tabindex="0"><span class="lab">${lab}</span><div class="cmp-track"><div class="cmp-fill" style="width:${(v * 100).toFixed(1)}%"></div></div><span class="val">${pct0(v)}</span></div>`).join('')}
     </div>`;
   if (weak) {
     html += `<div class="callout"><b>This isn't much better than always guessing the most common label.</b> Before using it:
@@ -542,8 +543,8 @@ function renderResults() {
   }
   if (!typed) {
     html += `<div class="try"><h3>Try it</h3>
-        <textarea id="t-try" rows="3" spellcheck="false" placeholder="Paste a new example to classify…">${esc(T.sample ? SAMPLE.tryText : '')}</textarea>
-        <div class="actions"><button type="button" class="btn-primary" id="t-try-go">Classify</button>
+        <textarea id="t-try" rows="3" spellcheck="false" placeholder="Paste a new example to classify…" data-tip="Paste any new text, then press Classify. Nothing you type here is stored.">${esc(T.sample ? SAMPLE.tryText : '')}</textarea>
+        <div class="actions"><button type="button" class="btn-primary" id="t-try-go" data-tip="Ask your model about the text above.">Classify</button>
           <span class="why-not">Trained models are very sure of themselves; treat the percentages as a ranking until you've calibrated.</span></div>
         <div id="t-try-out" class="try-out"></div>
       </div>`;
@@ -552,11 +553,11 @@ function renderResults() {
       <p>It's live on this server as <code>${esc(j.model)}</code>. Pick it from the Model menu in the playground, or call the API.
         It is saved on the server and comes back after a restart.</p>
       <div class="actions">
-        <button type="button" class="btn-primary" id="t-open">Open in playground</button>
-        ${typed ? '' : '<button type="button" class="btn-ghost" id="t-copy-py">Copy Python</button><button type="button" class="btn-ghost" id="t-copy-curl">Copy curl</button>'}
+        <button type="button" class="btn-primary" id="t-open" data-tip="Open the playground with this model, its question and your text filled in.">Open in playground</button>
+        ${typed ? '' : '<button type="button" class="btn-ghost" id="t-copy-py" data-tip="Copy a Python snippet that calls this model.">Copy Python</button><button type="button" class="btn-ghost" id="t-copy-curl" data-tip="Copy a curl command that calls this model.">Copy curl</button>'}
       </div>
-      ${j.checkpoint ? `<p class="note">Saved at <code>${esc(j.checkpoint)}</code>. Another server can load it with
-        <code>clm-serve --encoder ${esc(j.encoder)} --model ${esc(j.model)}=${esc(j.checkpoint)}</code>.</p>` : ''}
+      ${j.checkpoint ? `<p class="note">Saved at <code>${esc(j.checkpoint_display || j.checkpoint)}</code>. Another server can load it with
+        <code>clm-serve --encoder ${esc(j.encoder)} --model ${esc(j.model)}=${esc(j.checkpoint_display || j.checkpoint)}</code>.</p>` : ''}
     </div>`;
   box.innerHTML = html;
 
@@ -604,9 +605,10 @@ async function loadJobs() {
   try { jobs = (await api('GET', '/v1/train/jobs')).jobs || []; } catch (e) { return; }
   const box = $('#t-models');
   box.hidden = !jobs.length;
-  const pill = (j) => j.status === 'done' ? `<span class="pill ${j.served ? 'ok' : ''}">${j.served ? 'Live' : 'Not loaded'}</span>`
-    : j.status === 'running' || j.status === 'queued' ? '<span class="pill run">Training</span>'
-    : `<span class="pill bad">${j.status === 'stopped' ? 'Stopped' : 'Failed'}</span>`;
+  const pill = (j) => j.status === 'done'
+    ? `<span class="pill ${j.served ? 'ok' : ''}" data-tip="${j.served ? 'Loaded and answering requests on this server.' : esc('Not loaded: ' + (j.serve_error || 'trained with a different encoder than this server runs.'))}">${j.served ? 'Live' : 'Not loaded'}</span>`
+    : j.status === 'running' || j.status === 'queued' ? '<span class="pill run" data-tip="Training right now.">Training</span>'
+    : `<span class="pill bad" data-tip="${esc(j.error || 'Stopped before it finished.')}">${j.status === 'stopped' ? 'Stopped' : 'Failed'}</span>`;
   $('#t-models-body').innerHTML = `<div class="t-table-wrap"><table class="t-table">
       <thead><tr><th>Model</th><th>Status</th><th class="n">Accuracy</th><th class="n">Examples</th><th>Trained</th></tr></thead>
       <tbody>${jobs.map((j) => `<tr class="m-row" data-id="${esc(j.id)}" tabindex="0">

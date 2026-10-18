@@ -8,7 +8,7 @@ finishes. The rest of this page is the command-line version.
 `clm-train` turns labelled examples into a head that `clm-serve` can serve. The
 Nemotron encoder stays frozen. Every text is embedded once, then only the two small
 projection heads (state and action) and the logit scale are trained. The illustrated
-version of this page is `docs/site/training.html`.
+version of this page is [docs/site/training.html](site/training.html).
 
 ## 1. Install and start the encoder
 
@@ -20,7 +20,7 @@ pip install -e ".[mac]"     # macOS (Apple silicon)
 | `--encoder` | Use it for | Start it with |
 | --- | --- | --- |
 | `nemotron-3-embed-1b` | laptops, quick iteration (2.3 GB, 2048-d) | `python tools/local_embed_server.py --encoder nemotron-3-embed-1b` |
-| `nemotron-3-embed-8b` (default) | production on an NVIDIA GPU (15.9 GB, 4096-d) | `./serve_nemotron3_embed_8b.sh` |
+| `nemotron-3-embed-8b` (default) | production on an NVIDIA GPU (15.9 GB, 4096-d) | `scripts/serve_encoder_gpu.sh` |
 
 Training reaches the encoder at `http://127.0.0.1:8090/v1/embeddings` (`--embed-url`
 to change it, `--offline` for in-process vLLM on Linux). A head only works with the
@@ -93,7 +93,7 @@ Real runs on an Apple M5 Pro with Nemotron-3-Embed-1B:
 
 | Data | Train rows | Majority | clm-raw | Head | Time |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| customer-service category (1 question, 5 options) | 300 | 18.0% | 56.0% | 95.0% | 16 s |
+| customer-service category (1 question, 5 options) | 300 | 18.0% | 56.0% | 88.0% (88–96% over 9 runs) | 16 s |
 | typed-decisions, all workflows (15 questions) | 1,200 | 45.0% | 37.8% | 69.2% | 4.2 min |
 
 ## 4. Outputs (`--out`)
@@ -137,7 +137,25 @@ held-out data before a probability gates anything. A running `clm-serve` reloads
 | `need labelled questions in train, validation and test` | too few rows for the splits |
 | `belongs to encoder` / `records no encoder` | the head is from another encoder; retrain with the matching `--encoder` |
 
-Agent trajectories (state → action, best-of-N verification) use
-`train/finetune.py --task clm` and `evaluation/bon_eval.py` instead. `docs/FINETUNING.md`
-is upstream's script for an AI agent running fine-tuning experiments in a loop, not
-a user guide.
+## Agent trajectories: `train/finetune.py --task clm`
+
+```bash
+# agentic step traces (state / action / task_id / step_idx / reward per line), e.g. your own DeepSWE runs
+python train/finetune.py --task clm --data traces.jsonl \
+    --embed-url http://127.0.0.1:8090/v1/embeddings --served-model-name nemotron-3-embed-8b \
+    --holdout-tasks heldout_tasks.json --out-dir runs/agentic
+```
+
+Then score best-of-N on held-out tasks with the matching embeddings
+(`finetune.py` caches them under `runs/agentic/embeddings/`):
+
+```bash
+python evaluation/bon_eval.py --embeddings-dir runs/agentic/embeddings/<dir> \
+    --checkpoint runs/agentic/best_head.pt --tasks-file heldout_tasks.json --n 4 --window 12
+```
+
+To share a trained head, upload it to a Hub model repo; `clm-download --repo <user>/<repo>
+--file best_head.pt` fetches it to `~/.cache/clm/`.
+
+`docs/AGENT_FINETUNING_LOOP.md` is upstream's script for an AI agent running fine-tuning
+experiments in a loop; it is not a user guide.

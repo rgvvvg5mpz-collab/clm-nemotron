@@ -29,21 +29,21 @@
   </div>
 
   <nav id="viewswitch" class="viewswitch" aria-label="View" hidden>
-    <button type="button" class="vs-btn is-active" data-view="play" aria-pressed="true">Playground</button>
-    <button type="button" class="vs-btn" data-view="train" aria-pressed="false">Train a model</button>
+    <button type="button" class="vs-btn is-active" data-view="play" aria-pressed="true" data-tip="Ask questions about a piece of text with any loaded model.">Playground</button>
+    <button type="button" class="vs-btn" data-view="train" aria-pressed="false" data-tip="Train your own classifier from examples you have already labelled.">Train a model</button>
   </nav>
 
   <div class="topbar-right">
-    <button id="status" class="status" type="button" title="Server status — click to refresh">
+    <button id="status" class="status" type="button" data-tip="Whether clm-serve and its encoder are reachable, and how many models are loaded. Click to check again.">
       <span class="dot"></span><span id="status-text">connecting…</span>
     </button>
-    <button id="btn-settings" class="icon-btn" type="button" title="Connection settings" aria-label="Connection settings">
+    <button id="btn-settings" class="icon-btn" type="button" data-tip="Connection settings: which server this page talks to, and an API key if the server requires one." aria-label="Connection settings">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.63.68 1.1 1.33 1.1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
-    <button id="btn-theme" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
+    <button id="btn-theme" class="icon-btn" type="button" data-tip="Switch between light and dark." aria-label="Toggle theme">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
-    <a class="icon-btn" href="https://github.com/Contrastive-LM/CLM" target="_blank" rel="noopener" title="Repository" aria-label="Repository">
+    <a class="icon-btn" href="https://github.com/rgvvvg5mpz-collab/clm-nemotron" target="_blank" rel="noopener" data-tip="Open the project on GitHub: code, user guide and releases." aria-label="Repository">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
     </a>
   </div>
@@ -52,11 +52,11 @@
 <div id="settings" class="settings" hidden>
   <div class="settings-grid">
     <label>Server
-      <input id="base-url" type="text" spellcheck="false" placeholder="(same origin)">
+      <input id="base-url" type="text" spellcheck="false" placeholder="(same origin)" data-tip="Address of another clm-serve, e.g. http://gpu-box:8700. Leave blank for this one.">
       <small>Leave blank to use the server that served this page. A different host must allow CORS (<code>clm-serve --cors</code>).</small>
     </label>
     <label>API key
-      <input id="api-key" type="password" spellcheck="false" placeholder="only if CLM_API_KEY is set">
+      <input id="api-key" type="password" spellcheck="false" placeholder="only if CLM_API_KEY is set" data-tip="Needed only when the server was started with CLM_API_KEY. Kept in this browser.">
       <small>Sent as <code>Authorization: Bearer …</code>. Kept in this browser only.</small>
     </label>
   </div>
@@ -79,11 +79,11 @@
   <!-- ───────────────────────────── request ───────────────────────────── -->
   <section class="pane pane-req">
     <div class="tabs" role="tablist">
-      <button class="tab is-active" role="tab" data-mode="ask">Ask</button>
-      <button class="tab" role="tab" data-mode="rank">Rank</button>
+      <button class="tab is-active" role="tab" data-mode="ask" data-tip="Ask typed questions (yes/no, pick one, rate on a scale) about the text below.">Ask</button>
+      <button class="tab" role="tab" data-mode="rank" data-tip="Put a list of candidate answers in order of how well each fits the text.">Rank</button>
       <div class="tabs-spacer"></div>
       <div class="preset-wrap">
-        <select id="preset" class="preset" aria-label="Load an example">
+        <select id="preset" class="preset" aria-label="Load an example" data-tip="Load a ready-made example to see how good questions are written.">
           <option value="">Examples…</option>
         </select>
       </div>
@@ -93,12 +93,12 @@
 
       <div class="field">
         <div class="field-head">
-          <label for="state">State</label>
+          <label for="state">State</label><button type="button" class="tip-q" aria-label="What is the state?" data-tip="The text the model reasons about: a message, a ticket, a document, an agent's history. Put the question below, not in here.">?</button>
           <div class="field-tools">
-            <label class="chk" title="Send the state as parsed JSON instead of a string">
+            <label class="chk" data-tip="Send the state as structured JSON. Its fields become 'key: value' lines, which the model reads better than raw JSON.">
               <input type="checkbox" id="state-json"> JSON
             </label>
-            <span id="state-count" class="count">0 chars</span>
+            <span id="state-count" class="count" data-tip="Length of the state. Very long states are cut from the start, keeping the end.">0 chars</span>
           </div>
         </div>
         <textarea id="state" rows="6" spellcheck="false"
@@ -109,14 +109,14 @@
       <!-- ask mode -->
       <div id="mode-ask">
         <div class="field-head">
-          <label>Questions</label>
+          <label>Questions<button type="button" class="tip-q" aria-label="About questions" data-tip="Each question is answered separately against the same state, all in one request.">?</button></label>
           <span class="hint">one call answers all of them against the same state</span>
         </div>
         <div id="questions"></div>
         <div class="add-row">
-          <button class="btn-ghost" data-add="noul">+ noul</button>
-          <button class="btn-ghost" data-add="choice">+ choice</button>
-          <button class="btn-ghost" data-add="score">+ score</button>
+          <button class="btn-ghost" data-add="noul" data-tip="Add a yes/no question. The answer is the probability that the statement is true.">+ noul</button>
+          <button class="btn-ghost" data-add="choice" data-tip="Add a pick-one question with named options.">+ choice</button>
+          <button class="btn-ghost" data-add="score" data-tip="Add a rating on an ordered scale, such as Low to Critical.">+ score</button>
         </div>
       </div>
 
@@ -124,28 +124,28 @@
       <div id="mode-rank" hidden>
         <div class="field">
           <div class="field-head"><label for="rank-instructions">Question <span class="opt">optional</span></label></div>
-          <input id="rank-instructions" type="text" placeholder="e.g. Which trajectory solves the task?">
+          <input id="rank-instructions" type="text" placeholder="e.g. Which trajectory solves the task?" data-tip="Optional question that frames the ranking, such as 'Which answer is correct?'">
         </div>
         <div class="field">
           <div class="field-head">
             <label for="rank-candidates">Candidates</label>
             <span class="hint">one per line</span>
           </div>
-          <textarea id="rank-candidates" rows="10" spellcheck="false"
+          <textarea id="rank-candidates" rows="10" spellcheck="false" data-tip="One candidate per line. Each is scored against the state."
                     placeholder="The Moon's gravitational pull.&#10;Photosynthesis in plants.&#10;Because the Earth is round."></textarea>
         </div>
         <p class="note">Posts to <code>POST /v1/rank</code>: the state head sees the state as <em>context</em> plus the question, and the action head sees each candidate <strong>verbatim</strong> — nothing is prefixed or reworded.</p>
       </div>
 
       <div class="controls">
-        <label class="ctl">Model
+        <label class="ctl">Model<button type="button" class="tip-q" aria-label="About models" data-tip="clm-raw is the encoder alone: no training, scores are uncalibrated. Every other name is a trained model.">?</button>
           <select id="model"><option value="clm-latest">clm-latest</option></select>
         </label>
       </div>
     </div>
 
     <div class="pane-foot">
-      <button id="run" class="btn-primary">Run <kbd>⌘</kbd><kbd>↵</kbd></button>
+      <button id="run" class="btn-primary" data-tip="Send the request (Cmd or Ctrl + Enter).">Run <kbd>⌘</kbd><kbd>↵</kbd></button>
       <button id="share" class="btn-ghost" title="Copy a link that reopens this exact request">Copy link</button>
     </div>
   </section>
@@ -153,12 +153,12 @@
   <!-- ───────────────────────────── response ───────────────────────────── -->
   <section class="pane pane-res">
     <div class="tabs" role="tablist">
-      <button class="tab is-active" role="tab" data-view="answer">Answer</button>
-      <button class="tab" role="tab" data-view="json">JSON</button>
-      <button class="tab" role="tab" data-view="curl">curl</button>
-      <button class="tab" role="tab" data-view="python">Python</button>
+      <button class="tab is-active" role="tab" data-view="answer" data-tip="The answers as charts.">Answer</button>
+      <button class="tab" role="tab" data-view="json" data-tip="The exact JSON the server returned.">JSON</button>
+      <button class="tab" role="tab" data-view="curl" data-tip="The same request as a curl command.">curl</button>
+      <button class="tab" role="tab" data-view="python" data-tip="The same request with the Python client.">Python</button>
       <div class="tabs-spacer"></div>
-      <button id="copy-view" class="btn-ghost small" hidden>Copy</button>
+      <button id="copy-view" class="btn-ghost small" hidden data-tip="Copy what this tab shows.">Copy</button>
     </div>
 
     <div id="meta" class="meta" hidden></div>
@@ -202,14 +202,14 @@
         <div class="step-title"><h2>Add labelled examples</h2><span class="step-done" id="t-done-1" hidden>Done</span></div>
         <p class="step-sub">A file with one column of text and one column with the right label, such as a spreadsheet saved as CSV.</p>
         <div id="t-pick">
-          <label id="t-drop" class="drop" for="t-file">
+          <label id="t-drop" class="drop" for="t-file" data-tip="Click to choose a file, or drag one here. You'll see the first rows so you can check the columns.">
             <input type="file" id="t-file" accept=".csv,.jsonl,.json,.parquet">
             <span class="drop-main"><b>Drop a file here</b> or <u>choose one</u></span>
             <span class="drop-sub">CSV, JSONL, JSON or Parquet, up to 50 MB</span>
           </label>
           <div class="or-row">
-            <button type="button" id="t-sample" class="btn-ghost">Try it with sample data</button>
-            <span class="hint">400 synthetic support conversations, 5 categories</span>
+            <button type="button" id="t-sample" class="btn-ghost" data-tip="Loads 400 example support conversations with their correct category, so you can try every step.">Try it with sample data</button>
+            <span class="hint">400 synthetic support conversations, 5 categories. Demo only: labelled by a model, not for real decisions.</span>
           </div>
         </div>
         <div id="t-busy-1" class="busy" hidden><span class="spinner" aria-hidden="true"></span><span>Reading the file…</span></div>
@@ -221,7 +221,7 @@
     <section class="step is-locked" id="t-step-2">
       <div class="step-num" aria-hidden="true">2</div>
       <div class="step-main">
-        <div class="step-title"><h2>Describe what the labels mean</h2><span class="step-done" id="t-done-2" hidden>Done</span></div>
+        <div class="step-title"><h2>Describe what the labels mean<button type="button" class="tip-q" aria-label="Why describe labels?" data-tip="The model matches each text against these descriptions. Clear descriptions that use the words in your examples give better accuracy, before and after training.">?</button></h2><span class="step-done" id="t-done-2" hidden>Done</span></div>
         <p class="step-sub">The model reads these descriptions, not the label names. Describe each label with the words that show up in its examples.</p>
         <div id="t-question"></div>
       </div>
@@ -230,7 +230,7 @@
     <section class="step is-locked" id="t-step-3">
       <div class="step-num" aria-hidden="true">3</div>
       <div class="step-main">
-        <div class="step-title"><h2>Train</h2></div>
+        <div class="step-title"><h2>Train<button type="button" class="tip-q" aria-label="What happens in training?" data-tip="The Nemotron encoder reads every example once and stays unchanged. Two small networks on top learn your labels. Only they are trained, which is why it takes seconds to minutes.">?</button></h2></div>
         <div id="t-train"></div>
         <div id="t-progress" hidden></div>
         <div id="t-err-3" class="t-err" role="alert" hidden></div>
@@ -258,8 +258,8 @@
   <div class="q-card" data-type="noul">
     <div class="q-head">
       <span class="q-type"></span>
-      <input class="q-id" type="text" spellcheck="false" aria-label="Question id">
-      <select class="q-type-sel" aria-label="Question type">
+      <input class="q-id" type="text" spellcheck="false" aria-label="Question id" data-tip="Name of this question. The answer comes back under this name.">
+      <select class="q-type-sel" aria-label="Question type" data-tip="noul: yes or no. choice: pick one option. score: a level on an ordered scale.">
         <option value="noul">noul</option>
         <option value="choice">choice</option>
         <option value="score">score</option>
@@ -268,7 +268,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
-    <input class="q-instructions" type="text" placeholder="Instructions — the question asked of the state">
+    <input class="q-instructions" type="text" placeholder="Instructions — the question asked of the state" data-tip="The question or statement, such as 'Is this urgent?' It is added after the state.">
     <div class="q-criteria"></div>
     <div class="q-actions">
       <button class="btn-ghost small q-add" type="button" hidden></button>
@@ -278,6 +278,7 @@
 </template>
 
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="train.js"></script>
 </body>
 </html>

@@ -5,14 +5,14 @@
 # added by clm-serve (clm/encoders.py), not here, because the OpenAI /v1/embeddings route
 # does not add them. NVIDIA validated vLLM 0.21-0.25 and nvcr.io/nvidia/vllm:26.06-py3.
 #
-# Usage: GPU=0 PORT=8090 UTIL=0.35 MAXLEN=8192 ./serve_nemotron3_embed_8b.sh
+# Usage: GPU=0 PORT=8090 UTIL=0.35 MAXLEN=8192 scripts/serve_encoder_gpu.sh
 #        FP8=1 on Hopper / Ada adds --quantization fp8_per_tensor
 set -u
 GPU="${GPU:-0}"
 PORT="${PORT:-8090}"
 UTIL="${UTIL:-0.35}"
 MAXLEN="${MAXLEN:-8192}"     # model supports 32768; clm-serve --max-tokens must not exceed this
-LOGDIR="${LOGDIR:-$(cd "$(dirname "$0")/.." && pwd)/logs}"
+LOGDIR="${LOGDIR:-$(cd "$(dirname "$0")/../.." && pwd)/logs}"   # repo/logs
 EXTRA=()
 if [ "${FP8:-0}" = "1" ]; then EXTRA+=(--quantization fp8_per_tensor); fi
 if ! command -v vllm >/dev/null 2>&1; then
@@ -35,6 +35,7 @@ CUDA_VISIBLE_DEVICES=$GPU exec vllm serve nvidia/Nemotron-3-Embed-8B-BF16 \
     --max-model-len "$MAXLEN" \
     --gpu-memory-utilization "$UTIL" \
     --max-num-seqs 32 \
+    --host "${HOST:-127.0.0.1}" \
     --port "$PORT" \
     ${EXTRA[@]+"${EXTRA[@]}"} \
     >> "$LOG" 2>&1

@@ -3,14 +3,17 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "contrastive-lm"
-version = "0.1.0"
-description = "CLM: contrastive language model serving engine and System One API (typed noul / choice / score questions over state)"
+name = "clm-nemotron"
+version = "0.2.0"
+description = "Contrastive Language Models on NVIDIA Nemotron: fast, cheap classifiers and rankers served behind a typed-question API, trainable from a browser"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Jacky Kwok", email = "jackykwok@berkeley.edu" }]
-keywords = ["contrastive", "embeddings", "system-one", "verifier", "ranking"]
+authors = [
+    { name = "CLM-Nemotron maintainers" },
+    { name = "Jacky Kwok (upstream CLM)", email = "jackykwok@berkeley.edu" },
+]
+keywords = ["contrastive", "embeddings", "classification", "nemotron", "system-one", "ranking"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -19,29 +22,28 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+# What clm-serve and clm-train need.  The encoder runs separately: vLLM on a Linux GPU
+# ([gpu] extra) or tools/local_embed_server.py on a Mac or CPU ([mac] extra).
 dependencies = [
     "numpy>=1.24",
     "requests>=2.28",
-    # the serving engine (projection heads) and the HTTP API
     "torch>=2.1",
     "fastapi>=0.100",
     "uvicorn>=0.23",
-    # the Nemotron-3-Embed-8B encoder server (Linux + NVIDIA GPU); on macOS use the
-    # [mac] extra and tools/local_embed_server.py instead
-    "vllm>=0.6; sys_platform == 'linux'",
-    # train/finetune.py: read the published Parquet embedding datasets
-    "pyarrow>=14",
+    "transformers>=5.2",          # the encoder's tokenizer, so long texts keep their prompt
+    "pyarrow>=14",                # parquet training data
+    "huggingface_hub>=0.20",      # typed datasets and optional Hub downloads
 ]
 
 [project.optional-dependencies]
-# kept for compatibility: serve and vllm are now installed by default
-serve = []
-vllm = []
-# download checkpoints from the Hugging Face Hub with the hub client (plain HTTPS works without it)
-hf = ["huggingface_hub>=0.20"]
-# tools/local_embed_server.py: the encoder on Apple silicon (MPS) or CPU, no vLLM
-mac = ["sentence-transformers>=5.4.1", "transformers>=5.2", "huggingface_hub>=0.20"]
-all = ["contrastive-lm[hf]"]
+# the 8B encoder behind vLLM (Linux + NVIDIA GPU): scripts/serve_encoder_gpu.sh
+gpu = ["vllm>=0.6"]
+# tools/local_embed_server.py: the encoder on Apple silicon (MPS) or CPU
+mac = ["sentence-transformers>=5.4.1"]
+# tests/ (no GPU, no network)
+test = ["pytest>=8", "httpx>=0.25", "pyflakes>=3"]
+# examples/t_rex: persistent HTTP client for the real-time player
+examples = ["httpx>=0.25"]
 
 [project.scripts]
 clm-serve = "clm.server:main"
@@ -49,10 +51,9 @@ clm-train = "clm.train_cli:main"
 clm-download = "clm.heads:download_main"
 
 [project.urls]
-Homepage = "https://github.com/Contrastive-LM/CLM"
-Blog = "https://contrastive-lm.notion.site"
-Discord = "https://discord.gg/5dAQEDJBs"
-"Data & Models" = "https://huggingface.co/Contrastive-LM"
+Homepage = "https://github.com/rgvvvg5mpz-collab/clm-nemotron"
+"User guide" = "https://github.com/rgvvvg5mpz-collab/clm-nemotron/blob/main/docs/USER_GUIDE.md"
+"Upstream CLM" = "https://github.com/Contrastive-LM/CLM"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash \"Claude Code/scripts/start.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/stop.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/status.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/test.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/setup.sh\":*)",
+      "Bash(bash \"Claude Code/scripts/fetch-models.sh\":*)",
+      "Bash(curl -s localhost:8700:*)",
+      "Bash(curl -s http://localhost:8700:*)",
+      "Bash(tail -n:*)"
+    ]
+  }
+}

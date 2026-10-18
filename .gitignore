@@ -18,3 +18,16 @@ logs/*.log
 examples/t_rex/data/
 examples/t_rex/cache/
 examples/t_rex/artifacts/
+# Local state: downloaded models, release builds, training runs, logs, pid files
+models/
+dist/
+runs/
+logs/
+.run/
+
+# Claude Code: local-only settings
+.claude/launch.json
+.claude/settings.local.json
+
+# macOS
+.DS_Store

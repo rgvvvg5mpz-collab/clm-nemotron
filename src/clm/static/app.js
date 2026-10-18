@@ -398,12 +398,12 @@ async function run() {
 function renderMeta(main) {
   const u = main.json.usage || {};
   const bits = [
-    `<span>model <b>${esc(main.json.model)}</b></span>`,
-    `<span>latency <b>${(main.latency ?? main.roundTrip).toFixed(1)} ms</b></span>`,
+    `<span data-tip="The model that answered.">model <b>${esc(main.json.model)}</b></span>`,
+    `<span data-tip="Time spent inside clm-serve, including the encoder.">latency <b>${(main.latency ?? main.roundTrip).toFixed(1)} ms</b></span>`,
   ];
-  if (main.latency !== null) bits.push(`<span>round trip <b>${main.roundTrip.toFixed(0)} ms</b></span>`);
-  if (u.input_tokens !== undefined) bits.push(`<span>encoder tokens <b>${u.input_tokens}</b></span>`);
-  if (u.billing_units !== undefined) bits.push(`<span>billing units <b>${u.billing_units}</b></span>`);
+  if (main.latency !== null) bits.push(`<span data-tip="Total time as seen by this browser, network included.">round trip <b>${main.roundTrip.toFixed(0)} ms</b></span>`);
+  if (u.input_tokens !== undefined) bits.push(`<span data-tip="Tokens the encoder had to read for this request. Texts it has seen before are cached and cost nothing.">encoder tokens <b>${u.input_tokens}</b></span>`);
+  if (u.billing_units !== undefined) bits.push(`<span data-tip="Number of questions answered in this request.">billing units <b>${u.billing_units}</b></span>`);
   const meta = $('#meta');
   meta.innerHTML = bits.join('');
   meta.hidden = false;
@@ -432,14 +432,14 @@ function answerHtml(id, q, a) {
     head = `<div class="headline">
       <span class="headline-val">${pct(p)}</span>
       <span class="headline-lab">p(true)</span>
-      <span class="headline-sub">leans ${p >= 0.5 ? 'true' : 'false'}</span>
+      <span class="headline-sub" data-tip="Above 50% leans true. Pick your own threshold from labelled examples before acting on it.">leans ${p >= 0.5 ? 'true' : 'false'}</span>
     </div>`;
     body = barsHtml([['true', p], ['false', 1 - p]], (k) => (q && q.criteria && q.criteria[k]) || '');
   } else if (type === 'choice') {
     const entries = Object.entries(a.probabilities).sort((x, y) => y[1] - x[1]);
     head = `<div class="headline">
       <span class="headline-val">${esc(a.choice)}</span>
-      <span class="headline-sub">confidence ${pct(a.confidence)}</span>
+      <span class="headline-sub" data-tip="Top probability minus the average of the others. A ranking signal, not a calibrated probability.">confidence ${pct(a.confidence)}</span>
     </div>`;
     body = barsHtml(entries, (k) => (q && q.criteria && q.criteria[k]) || '');
   } else {
@@ -450,7 +450,7 @@ function answerHtml(id, q, a) {
     head = `<div class="headline">
         <span class="headline-val">${a.score.toFixed(2)}</span>
         <span class="headline-lab">${esc(legend[String(Math.round(a.score))] || '')}</span>
-        <span class="headline-sub">expected level of ${n - 1} · confidence ${pct(a.confidence)}</span>
+        <span class="headline-sub" data-tip="The score is the probability-weighted average level, so 2.3 sits between levels 2 and 3.">expected level of ${n - 1} · confidence ${pct(a.confidence)}</span>
       </div>
       <div class="gauge">
         <div class="gauge-track"><div class="gauge-needle" style="left:${(frac * 100).toFixed(2)}%"></div></div>
@@ -679,6 +679,7 @@ function questionCard(q, i) {
   if (q.type === 'noul') {
     add.hidden = false;
     add.textContent = q.showNoulCrit ? '− descriptions' : '+ descriptions';
+    add.dataset.tip = q.showNoulCrit ? 'Remove the true/false descriptions.' : 'Describe what a true and a false case look like. This usually improves accuracy.';
     add.addEventListener('click', () => {
       q.showNoulCrit = !q.showNoulCrit;
       if (!q.showNoulCrit) q.noulCrit = { true: '', false: '' };
@@ -694,6 +695,7 @@ function questionCard(q, i) {
   } else if (q.type === 'choice') {
     add.hidden = false;
     add.textContent = '+ option';
+    add.dataset.tip = 'Add another option to choose from.';
     add.addEventListener('click', () => { q.choiceCrit.push({ key: '', desc: '' }); renderQuestions(); save(); });
     q.choiceCrit.forEach((row, j) => {
       crit.appendChild(critRow(
@@ -705,6 +707,7 @@ function questionCard(q, i) {
   } else {
     add.hidden = false;
     add.textContent = '+ level';
+    add.dataset.tip = 'Add another level at the top of the scale.';
     add.addEventListener('click', () => { q.scoreCrit.push(''); renderQuestions(); save(); });
     q.scoreCrit.forEach((lvl, j) => {
       crit.appendChild(critRow(
@@ -725,12 +728,14 @@ function critRow(opt, onDesc, onKey, onRemove) {
     const n = document.createElement('span');
     n.className = 'crit-idx';
     n.textContent = opt.index;
+    n.dataset.tip = `Level ${opt.index}. Levels must go from lowest to highest.`;
     row.appendChild(n);
   } else if (opt.fixed) {
     const n = document.createElement('input');
     n.className = 'crit-key';
     n.value = opt.fixed;
     n.disabled = true;
+    n.dataset.tip = `What a “${opt.fixed}” case looks like (optional).`;
     row.appendChild(n);
   } else {
     const k = document.createElement('input');
@@ -738,6 +743,7 @@ function critRow(opt, onDesc, onKey, onRemove) {
     k.type = 'text';
     k.spellcheck = false;
     k.placeholder = 'option key';
+    k.dataset.tip = 'The name returned as the answer. The model reads the description, not this name, unless the description is empty.';
     k.value = opt.key || '';
     k.addEventListener('input', () => onKey(k.value));
     row.appendChild(k);
@@ -747,6 +753,8 @@ function critRow(opt, onDesc, onKey, onRemove) {
   d.className = 'crit-desc';
   d.type = 'text';
   d.placeholder = opt.placeholder || '';
+  d.dataset.tip = opt.index !== undefined ? 'What this level means. The model compares the text with each level description.'
+    : 'What this option means. The model compares the text with this description, so use the words such texts contain.';
   d.value = opt.value || '';
   d.addEventListener('input', () => onDesc(d.value));
   row.appendChild(d);
@@ -755,7 +763,8 @@ function critRow(opt, onDesc, onKey, onRemove) {
     const b = document.createElement('button');
     b.className = 'icon-btn small';
     b.type = 'button';
-    b.title = 'Remove';
+    b.dataset.tip = 'Remove this row.';
+    b.setAttribute('aria-label', 'Remove');
     b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     b.addEventListener('click', onRemove);
     row.appendChild(b);

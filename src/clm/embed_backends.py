@@ -26,7 +26,7 @@ class Recipe:
         """``model`` overrides where the tokenizer is loaded from (default: the encoder's HF id)."""
         from transformers import AutoTokenizer
         self.spec = get_encoder(encoder)
-        self.tok = AutoTokenizer.from_pretrained(model or self.spec.hf_id)
+        self.tok = AutoTokenizer.from_pretrained(model or self.spec.source())
         self.max_len = max_len
 
     def ids(self, x, role: str) -> list[int]:

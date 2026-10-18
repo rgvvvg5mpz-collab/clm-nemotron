@@ -100,7 +100,7 @@ footer { color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line
 python tools/local_embed_server.py \
   --encoder nemotron-3-embed-1b
 # Linux + NVIDIA GPU
-./serve_nemotron3_embed_8b.sh</pre></div>
+scripts/serve_encoder_gpu.sh</pre></div>
     <div><span class="label">2 · train</span><b>Labels in, head out</b>
 <pre>clm-train --data tickets.csv \
   --question "Which team?" \
@@ -125,7 +125,7 @@ python tools/local_embed_server.py \
           <thead><tr><th><code>--encoder</code></th><th>Use it when</th><th>Start it with</th></tr></thead>
           <tbody>
             <tr><td><code>nemotron-3-embed-1b</code></td><td>Laptops and quick iteration (2.3 GB, 2048-d)</td><td><code>python tools/local_embed_server.py --encoder nemotron-3-embed-1b</code></td></tr>
-            <tr><td><code>nemotron-3-embed-8b</code></td><td>Production on an NVIDIA GPU (15.9 GB, 4096-d); the default</td><td><code>./serve_nemotron3_embed_8b.sh</code></td></tr>
+            <tr><td><code>nemotron-3-embed-8b</code></td><td>Production on an NVIDIA GPU (15.9 GB, 4096-d); the default</td><td><code>scripts/serve_encoder_gpu.sh</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -224,19 +224,19 @@ clm-train --data LocalLLaMA/typed-decisions --workflow all --encoder nemotron-3-
         <p>The end of a real run on an Apple M5 Pro: 300 labelled customer conversations, 100 for testing, five categories, Nemotron-3-Embed-1B.</p>
       </div>
 <pre>[choice] baselines: majority test 0.1800 | clm-raw (nemotron-3-embed-1b, no head) val 0.4333 test 0.5600
-[choice] epoch 11 loss 1.2846 val acc 0.9000 soft_ce 0.2739
+[choice] epoch 7 loss 1.6497 val acc 0.9000 soft_ce 0.3743
 …
-[choice] early stop at epoch 16
-[choice] best epoch 11: val acc 0.9000 | TEST acc 0.9500 (clm-raw 0.5600, init 0.1700, majority 0.1800)
+[choice] early stop at epoch 12
+[choice] best epoch 7: val acc 0.9000 | TEST acc 0.8800 (clm-raw 0.5600, init 0.3800, majority 0.1800)
 
-  test accuracy   head 95.0%   clm-raw 56.0%   majority 18.0%   (0.25 min)
-  serve it:  clm-serve --encoder nemotron-3-embed-1b --ckpt runs/example/head/best_head.pt
-  ask it:    POST /v1/systemone with "questions": the contents of runs/example/head/questions.json</pre>
+  test accuracy   head 88.0%   clm-raw 56.0%   majority 18.0%   (0.02 min, embeddings cached)
+  serve it:  clm-serve --encoder nemotron-3-embed-1b --ckpt runs/tickets/best_head.pt
+  ask it:    POST /v1/systemone with "questions": the contents of runs/tickets/questions.json</pre>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Run</th><th class="n">Train rows</th><th class="n">Majority</th><th class="n">clm-raw</th><th class="n">Head</th><th class="n">Time</th></tr></thead>
           <tbody>
-            <tr><td>Customer-service category (1 question, 5 options)</td><td class="n">300</td><td class="n">18.0%</td><td class="n">56.0%</td><td class="n">95.0%</td><td class="n">16 s</td></tr>
+            <tr><td>Customer-service category (1 question, 5 options)</td><td class="n">300</td><td class="n">18.0%</td><td class="n">56.0%</td><td class="n">88.0% <span class="dim">(88–96% over 9 runs)</span></td><td class="n">16 s</td></tr>
             <tr><td>All four typed-decisions workflows (15 questions)</td><td class="n">1,200</td><td class="n">45.0%</td><td class="n">37.8%</td><td class="n">69.2%</td><td class="n">4.2 min</td></tr>
           </tbody>
         </table>
@@ -302,12 +302,12 @@ r.answers["label"].probabilities   <span class="dim"># near 1.0: calibrate befor
           <tr><td><code>--embed-cache</code></td><td><code>OUT/embeddings</code></td><td>Share one cache between runs on the same data</td></tr>
           <tr><td><code>--epochs</code>, <code>--patience</code></td><td>20, 5</td><td>Training length and early stopping</td></tr>
           <tr><td><code>--batch</code>, <code>--lr</code></td><td>256, 5e-4</td><td>Optimiser settings</td></tr>
-          <tr><td><code>--width</code>, <code>--depth</code></td><td>1536, 3</td><td>Head size; try 512, 2 for a few hundred examples</td></tr>
+          <tr><td><code>--width</code>, <code>--depth</code></td><td>auto</td><td>Head size. 512 × 2 under 3,000 training examples, else 1536 × 3. Smaller heads are steadier on small data.</td></tr>
+          <tr><td><code>--seed</code></td><td>1234</td><td>Fixes the splits and the starting weights: the same data and seed give the same model</td></tr>
           <tr><td><code>--targets</code></td><td><code>soft</code></td><td>Train on <code>gold.probabilities</code> when present, otherwise the label</td></tr>
           <tr><td><code>--loss</code></td><td><code>infonce</code></td><td><code>infonce</code> contrasts against every option text in the batch; <code>softce</code> only against a question's own options</td></tr>
           <tr><td><code>--val-frac</code></td><td>0.1</td><td>Share of training rows or groups used to pick the best epoch</td></tr>
           <tr><td><code>--init-ckpt</code></td><td></td><td>Continue from a head trained on the same encoder</td></tr>
-          <tr><td><code>--seed</code></td><td>1234</td><td>Fixes the splits and the initialisation</td></tr>
         </tbody>
       </table>
     </div>

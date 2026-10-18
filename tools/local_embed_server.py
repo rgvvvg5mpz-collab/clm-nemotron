@@ -157,9 +157,10 @@ def main() -> None:
     from sentence_transformers import SentenceTransformer
     spec = get_encoder(args.encoder)
     device = pick_device(args.device)
-    print(f"[local-embed] loading {spec.hf_id} on {device} (bf16)...", flush=True)
+    src = spec.source()                     # the release copy in $CLM_MODELS_DIR, else the Hub
+    print(f"[local-embed] loading {spec.hf_id} from {src} on {device} (bf16)...", flush=True)
     t0 = time.time()
-    model = SentenceTransformer(spec.hf_id, device=device, model_kwargs={"dtype": torch.bfloat16})
+    model = SentenceTransformer(src, device=device, model_kwargs={"dtype": torch.bfloat16})
     model.eval()
     dim = model.get_sentence_embedding_dimension()
     if dim != spec.hidden_size:

@@ -1,0 +1,26 @@
+name: tests
+
+# Runs on every push and pull request. CPU only: no GPU, no encoder, no network.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (CPU torch, test extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[test]"
+      - name: Lint
+        run: python -m pyflakes src/clm tools train/finetune.py
+      - name: Test
+        run: python -m pytest tests -q

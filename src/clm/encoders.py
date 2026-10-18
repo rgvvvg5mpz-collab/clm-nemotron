@@ -55,6 +55,16 @@ class EncoderSpec:
     def keep(self, role: str | None) -> str:
         return self.action_keep if role == "action" else self.state_keep
 
+    def source(self) -> str:
+        """Where to load the encoder's weights and tokenizer from: a local copy when one exists
+        (``$CLM_MODELS_DIR/encoders/<name>``, filled by the model release), else the Hub id."""
+        root = os.environ.get("CLM_MODELS_DIR")
+        if root:
+            local = os.path.join(root, "encoders", self.name)
+            if os.path.isfile(os.path.join(local, "config.json")):
+                return local
+        return self.hf_id
+
     def vllm_command(self, port: int = 8090, max_model_len: int | None = None) -> str:
         """The ``vllm serve`` line that starts this encoder behind clm-serve."""
         return (f"vllm serve {self.hf_id} --served-model-name {self.name} --runner pooling \\\n"
@@ -153,7 +163,7 @@ def load_tokenizer(spec: EncoderSpec):
     """The encoder's tokenizer, or None when transformers is unavailable."""
     try:
         from transformers import AutoTokenizer
-        return AutoTokenizer.from_pretrained(spec.hf_id)
+        return AutoTokenizer.from_pretrained(spec.source())
     except Exception as e:  # noqa: BLE001  (not installed, offline, gated repo)
         print(f"[clm] no tokenizer for {spec.hf_id} ({type(e).__name__}: {e}); over-long texts are "
               "truncated by the embedder, which keeps the last tokens and can drop the prefix", flush=True)

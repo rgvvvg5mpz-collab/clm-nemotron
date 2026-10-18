@@ -152,8 +152,8 @@ def main(argv: list[str] | None = None) -> None:
     h.add_argument("--patience", type=int, default=5, help="stop after this many epochs without a better validation score")
     h.add_argument("--batch", type=int, default=256)
     h.add_argument("--lr", type=float, default=None, help="default 5e-4")
-    h.add_argument("--width", type=int, default=None, help="head hidden width (default 1536)")
-    h.add_argument("--depth", type=int, default=None, help="head layers (default 3)")
+    h.add_argument("--width", type=int, default=None, help="head hidden width (default: 512 under 3,000 training examples, else 1536)")
+    h.add_argument("--depth", type=int, default=None, help="head layers (default: 2 under 3,000 training examples, else 3)")
     h.add_argument("--targets", choices=["soft", "hard"], default="soft",
                    help="soft: train on gold probabilities when given; hard: on the label only")
     h.add_argument("--loss", choices=["infonce", "softce"], default="infonce")

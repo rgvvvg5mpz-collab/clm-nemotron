@@ -1,0 +1,111 @@
+1
+00:00:00,600 --> 00:00:08,782
+Every day our teams route tickets, tag documents and triage alerts, and many now send each decision to a frontier language model.
+
+2
+00:00:08,782 --> 00:00:15,062
+Here's when a small trained classifier does that job better: cheaper, faster, and inside our walls.
+
+3
+00:00:16,262 --> 00:00:23,834
+Classification at volume is millions of short, repetitive decisions with fixed labels and plenty of past examples.
+
+4
+00:00:23,834 --> 00:00:28,218
+What matters is speed, cost per decision, privacy and consistency.
+
+5
+00:00:28,218 --> 00:00:35,125
+A frontier model is a brilliant generalist, but we pay per token, and every request leaves the building.
+
+6
+00:00:36,325 --> 00:00:37,806
+CLM splits the work.
+
+7
+00:00:37,806 --> 00:00:41,778
+An NVIDIA Nemotron model reads each text and never changes.
+
+8
+00:00:41,778 --> 00:00:47,769
+A small model on top learns our labels from our own examples, in minutes, from a browser.
+
+9
+00:00:47,769 --> 00:00:52,818
+We get a probability for every label, in milliseconds, on our own hardware.
+
+10
+00:00:54,018 --> 00:01:02,179
+On a ticket-routing demo, a model trained on three hundred examples gets eighty-eight to ninety-six percent of unseen tickets right.
+
+11
+00:01:02,179 --> 00:01:05,580
+Untrained, the same reader manages fifty-seven percent.
+
+12
+00:01:05,580 --> 00:01:12,567
+The demo data is synthetic, so the real test is our own data, against a frontier model, with the included script.
+
+13
+00:01:13,767 --> 00:01:20,686
+It's fast: a median of thirty-three milliseconds on one laptop, with no network hop, queue or rate limit.
+
+14
+00:01:20,686 --> 00:01:26,089
+One laptop handles about thirty-six answers a second, roughly three million a day.
+
+15
+00:01:27,289 --> 00:01:28,248
+And it's cheap.
+
+16
+00:01:28,248 --> 00:01:33,551
+A million decisions take about eight hours of laptop compute, around eight dollars.
+
+17
+00:01:33,551 --> 00:01:42,689
+At list prices, the same million tickets cost about fifty-eight dollars on the smallest frontier model, and over a thousand on the larger ones.
+
+18
+00:01:42,689 --> 00:01:45,628
+Conservative estimates, for the frontier side.
+
+19
+00:01:46,828 --> 00:01:47,728
+It stays ours.
+
+20
+00:01:47,728 --> 00:01:58,016
+Texts never leave our machines, the same input gives the same answer, and model files are versioned and verified, with a full governance pack in the repository.
+
+21
+00:01:59,216 --> 00:02:01,350
+Use each where it's strongest.
+
+22
+00:02:01,350 --> 00:02:05,833
+CLM for fixed labels, high volume, and fast, private answers.
+
+23
+00:02:05,833 --> 00:02:10,031
+A frontier model for open questions, writing and reasoning.
+
+24
+00:02:10,031 --> 00:02:16,649
+Best of both: CLM decides, and only its uncertain cases go to a frontier model or a person.
+
+25
+00:02:17,849 --> 00:02:25,462
+Getting started is small: a few hundred labelled examples, minutes of training in a browser, and a laptop or small server.
+
+26
+00:02:25,462 --> 00:02:33,263
+Before real decisions, people check the labels, the probabilities are calibrated, and the governance checklist is signed off.
+
+27
+00:02:34,463 --> 00:02:49,334
+We recommend a four-week pilot on one high-volume workflow: label five hundred real examples, test CLM and a frontier model side by side with the included script, and decide on measured accuracy, cost and latency.
+
+28
+00:02:49,334 --> 00:02:50,026
+Thank you.

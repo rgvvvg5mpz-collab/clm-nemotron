@@ -35,7 +35,7 @@ from .heads import default_device
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
-_UI_FILES = ("index.html", "app.css", "app.js", "train.js")
+_UI_FILES = ("index.html", "app.css", "app.js", "tips.js", "train.js")
 
 
 def _asset_stamp() -> str:
@@ -50,7 +50,7 @@ def _index_html() -> str:
         html = fh.read()
     v = _asset_stamp()
     return (html.replace('href="app.css"', f'href="app.css?v={v}"').replace('src="app.js"', f'src="app.js?v={v}"')
-            .replace('src="train.js"', f'src="train.js?v={v}"'))
+            .replace('src="tips.js"', f'src="tips.js?v={v}"').replace('src="train.js"', f'src="train.js?v={v}"'))
 
 
 class _RevalidatingStatic(StaticFiles):
@@ -76,7 +76,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
     playground's Train view uses: upload and inspect a file, start a training job,
     follow its progress, stop it.  Finished heads are served as new models.
     """
-    app = FastAPI(title="CLM System One API", version="0.1.0")
+    app = FastAPI(title="CLM System One API", version="0.2.0")
     app.state.engine = engine
     if cors:
         from fastapi.middleware.cors import CORSMiddleware

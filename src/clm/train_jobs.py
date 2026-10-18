@@ -57,6 +57,13 @@ def _slug(name: str) -> str:
     return s[:48] or "model"
 
 
+def _display_path(path: str) -> str:
+    """The path relative to where clm-serve was started, when it is inside it (so screenshots and
+    shared links don't show a home directory), else the absolute path."""
+    rel = os.path.relpath(path, os.getcwd())
+    return path if rel.startswith("..") else rel
+
+
 def summarize(rows: list[dict]) -> dict:
     """Columns, a preview, and which columns look like the text and the label."""
     columns = list(rows[0]) if rows else []
@@ -324,6 +331,7 @@ class TrainingJobs:
                                  "per_question": res["test"]["per_question"],
                                  "raw_per_question": res.get("raw_test_per_question"), "minutes": res["minutes"]}
                 job["checkpoint"] = os.path.join(out_dir, "best_head.pt")
+                job["checkpoint_display"] = _display_path(job["checkpoint"])
                 job["status"] = "done"
                 job["progress"] = {"stage": "done"}
             self._serve(job)

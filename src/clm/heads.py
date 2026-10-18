@@ -84,7 +84,7 @@ class HeadPair:
 
     def _load(self) -> None:
         import torch
-        ck = torch.load(self.path, map_location="cpu")
+        ck = torch.load(self.path, map_location="cpu", weights_only=True)   # tensors and plain data only: no code
         cfg = dict(ck["cfg"])
         if self.encoder is not None:
             check_compatible(checkpoint_encoder(cfg), self.encoder, what=f"head {self.name!r} ({self.path})")
